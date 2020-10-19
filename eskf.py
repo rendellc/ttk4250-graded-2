@@ -128,7 +128,7 @@ class ESKF:
         quaternion_prediction = quaternion_prediction  / la.norm(quaternion_prediction)
 
         acceleration_bias_prediction = (1 - Ts * self.p_acc) * acceleration_bias
-        gyroscope_bias_prediction = (1 - Ts * self.p_bias) * gyroscope_bias
+        gyroscope_bias_prediction = (1 - Ts * self.p_gyro) * gyroscope_bias
 
         x_nominal_predicted = np.concatenate(
             (
@@ -216,7 +216,7 @@ class ESKF:
 
         R = quaternion_to_rotation_matrix(x_nominal[ATT_IDX], debug=self.debug)
 
-        G_diag = la.block_diag([-R, -np.eye(3), np.eye(3), np.eye(3)])
+        G_diag = la.block_diag(-R, -np.eye(3), np.eye(3), np.eye(3))
         G = np.vstack([np.zeros((3,12)), G_diag])
 
         assert G.shape == (15, 12), f"ESKF.Gerr: G-matrix shape incorrect {G.shape}"
@@ -259,7 +259,7 @@ class ESKF:
         A = self.Aerr(x_nominal, acceleration, omega)
         G = self.Gerr(x_nominal)
 
-        V = np.bmat([[-A, G@self.Q_err@G.T], [np.zeros_like(A), A.T]]) * Ts
+        V = np.block([[-A, G@self.Q_err@G.T], [np.zeros_like(A), A.T]]) * Ts
         assert V.shape == (
             30,
             30,
@@ -435,8 +435,8 @@ class ESKF:
         x_injected = x_injected/la.norm(x_injected)
 
         # Covariance
-        G_injected = la.block_diag([np.eye(6), np.eye(3) - cross_product_matrix(delta_x[ERR_ATT_IDX]/2), np.eye(6)])  
-        P_injected = G @ P @ G.T
+        G_injected = la.block_diag(np.eye(6), np.eye(3) - cross_product_matrix(delta_x[ERR_ATT_IDX]/2), np.eye(6))  
+        P_injected = G_injected @ P @ G_injected.T
 
         assert x_injected.shape == (
             16,
@@ -491,7 +491,7 @@ class ESKF:
         ), f"ESKF.innovation_GNSS: lever_arm shape incorrect {lever_arm.shape}"
 
 
-        # Hx = np.bmat(np.eye(3), np.zeros((3,13)))
+        # Hx = np.block([np.eye(3), np.zeros((3,13))])
 
         # q = x_nominal[ATT_IDX]
         # Qdx = np.array([
@@ -499,9 +499,9 @@ class ESKF:
         #     [ q[0], -q[3],  q[2]], 
         #     [ q[3],  q[0], -q[1]], 
         #     [-q[2],  q[1],  q[0]]]) /2
-        # Xdx = la.block_diag([np.eye(6), Qdx, np.eye(6)])
+        # Xdx = la.block_diag(np.eye(6), Qdx, np.eye(6))
         # H = Hx @ Xdx
-        H = np.bmat([np.eye(3), np.zeros((3,12))])
+        H = np.block([np.eye(3), np.zeros((3,12))])
 
         v = z_GNSS_position - x_nominal[POS_IDX]
 
@@ -564,7 +564,7 @@ class ESKF:
             x_nominal, P, z_GNSS_position, R_GNSS, lever_arm
         )
 
-        H = np.bmat([np.eye(3), np.zeros((3,12))])
+        H = np.block([np.eye(3), np.zeros((3,12))])
 
 
         # in case of a specified lever arm

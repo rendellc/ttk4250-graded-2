@@ -36,7 +36,8 @@ def quaternion_product(ql: np.ndarray, qr: np.ndarray) -> np.ndarray:
             f"utils.quaternion_product: Quaternion multiplication error, right quaternion wrong shape: {qr.shape}"
         )
 
-    eps_block = np.bmat([[0, -epsilon_left.T], [epsilon_left, utils.cross_product_matrix(epsilon_left)]])
+    eps_block = np.block([[0, -epsilon_left.T], [epsilon_left, utils.cross_product_matrix(epsilon_left)]]) 
+    
     quaternion = (eta_left * np.eye(4) + eps_block) @ q_right
 
     # Ensure result is of correct shape
