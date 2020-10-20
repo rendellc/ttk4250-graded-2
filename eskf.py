@@ -432,7 +432,7 @@ class ESKF:
         x_injected[ATT_IDX] = quaternion_product(x_nominal[ATT_IDX], delta_quat)
 
         # Done: Normalize quaternion
-        x_injected = x_injected/la.norm(x_injected)
+        x_injected[ATT_IDX] = x_injected[ATT_IDX]/la.norm(x_injected[ATT_IDX])
 
         # Covariance
         G_injected = la.block_diag(np.eye(6), np.eye(3) - cross_product_matrix(delta_x[ERR_ATT_IDX]/2), np.eye(6))  
@@ -725,7 +725,7 @@ class ESKF:
         return NEESes
 
     @classmethod
-    def _NEES(cls, diff, P):
+    def _NEES(cls, P, diff):
         NEES = diff @ la.solve(P, diff)
         assert NEES >= 0, "ESKF._NEES: negative NEES"
         return NEES

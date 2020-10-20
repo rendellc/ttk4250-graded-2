@@ -10,9 +10,9 @@ import numpy as np
 try: # see if tqdm is available, otherwise define it as a dummy
     try: # Ipython seem to require different tqdm.. try..except seem to be the easiest way to check
         __IPYTHON__
-        from tqdm.notebook import tqdm
+        import tqdm
     except:
-        from tqdm import tqdm
+        import tqdm
 except Exception as e:
     print(e)
     print(
@@ -102,6 +102,7 @@ z_acceleration = loaded_data["zAcc"].T
 z_GNSS = loaded_data["zGNSS"].T
 z_gyroscope = loaded_data["zGyro"].T
 
+Ts_IMU = [0, *np.diff(timeIMU)]
 
 dt = np.mean(np.diff(timeIMU))
 steps = len(z_acceleration)
@@ -115,13 +116,13 @@ cont_gyro_noise_std = 4.36e-5  # (rad/s)/sqrt(Hz)
 cont_acc_noise_std = 1.167e-3  # (m/s**2)/sqrt(Hz)
 
 # Discrete sample noise at simulation rate used
-rate_std = 0.5 * cont_gyro_noise_std * np.sqrt(1 / dt)
+rate_std = 0.5 * cont_gyro_noise_std * np.sqrt(1 / dt) # Hvorfor gange med en halv? (eq. 10.70)
 acc_std = 0.5 * cont_acc_noise_std * np.sqrt(1 / dt)
 
 # Bias values
 rate_bias_driving_noise_std = 5e-5
 cont_rate_bias_driving_noise_std = (
-    (1 / 3) * rate_bias_driving_noise_std / np.sqrt(1 / dt)
+    (1 / 3) * rate_bias_driving_noise_std / np.sqrt(1 / dt) # Hva skjer her?
 )
 
 acc_bias_driving_noise_std = 4e-3
@@ -172,8 +173,8 @@ x_pred[0, VEL_IDX] = np.array([20, 0, 0])  # starting at 20 m/s due north
 x_pred[0, 6] = 1  # no initial rotation: nose to North, right to East, and belly down
 
 # These have to be set reasonably to get good results
-P_pred[0][POS_IDX ** 2] = np.eye(3)# TODO
-P_pred[0][VEL_IDX ** 2] = np.eye(3)# TODO
+P_pred[0][POS_IDX ** 2] = 10**2 * np.eye(3)# TODO
+P_pred[0][VEL_IDX ** 2] = 5**2 * np.eye(3)# TODO
 P_pred[0][ERR_ATT_IDX ** 2] = np.eye(3)# TODO # error rotation vector (not quat)
 P_pred[0][ERR_ACC_BIAS_IDX ** 2] = np.eye(3)# TODO
 P_pred[0][ERR_GYRO_BIAS_IDX ** 2] = np.eye(3)# TODO
@@ -184,23 +185,23 @@ dummy = eskf.update_GNSS_position(x_pred[0], P_pred[0], z_GNSS[0], R_GNSS, lever
 # %% Run estimation
 # run this file with 'python -O run_INS_simulated.py' to turn of assertions and get about 8/5 speed increase for longer runs
 
-N: int = steps # TODO: choose a small value to begin with (500?), and gradually increase as you OK results
+N: int = 500 #steps # TODO: choose a small value to begin with (500?), and gradually increase as you OK results
 doGNSS: bool = True  # TODO: Set this to False if you want to check that the predictions make sense over reasonable time lenghts
 
 GNSSk: int = 0  # keep track of current step in GNSS measurements
 for k in tqdm.trange(N):
     if doGNSS and timeIMU[k] >= timeGNSS[GNSSk]:
-        NIS[GNSSk] = # TODO:
+        NIS[GNSSk] = eskf.NIS_GNSS_position(x_pred[k], P_pred[k], z_GNSS[GNSSk], R_GNSS, lever_arm)
 
-        x_est[k], P_est[k] = # TODO:
+        x_est[k], P_est[k] = eskf.update_GNSS_position(x_pred[k], P_pred[k], z_GNSS[GNSSk], R_GNSS, lever_arm)
         assert np.all(np.isfinite(P_est[k])), f"Not finite P_pred at index {k}"
-
+        
         GNSSk += 1
     else:
         # no updates, so let us take estimate = prediction
-        x_est[k] = # TODO
-        P_est[k] = # TODO
-
+        x_est[k] = x_pred[k]
+        P_est[k] = P_pred[k]
+        
     delta_x[k] = eskf.delta_x(x_est[k], x_true[k])
     (
         NEES_all[k],
@@ -209,10 +210,10 @@ for k in tqdm.trange(N):
         NEES_att[k],
         NEES_accbias[k],
         NEES_gyrobias[k],
-    ) = # TODO: The true error state at step k
+    ) = eskf.NEESes(x_est[k], P_est[k], x_true[k])
 
     if k < N - 1:
-        x_pred[k + 1], P_pred[k + 1] = # TODO: Hint: measurements come from the the present and past, not the future
+        x_pred[k + 1], P_pred[k + 1] = eskf.predict(x_est[k], P_est[k], z_acceleration[k+1], z_gyroscope[k+1], Ts_IMU[k+1])
 
     if eskf.debug:
         assert np.all(np.isfinite(P_pred[k])), f"Not finite P_pred at index {k + 1}"
@@ -328,13 +329,13 @@ fig4, axs4 = plt.subplots(2, 1, num=4, clear=True)
 axs4[0].plot(t, np.linalg.norm(delta_x[:N, POS_IDX], axis=1))
 axs4[0].plot(
     np.arange(0, N, 100) * dt,
-    np.linalg.norm(x_true[99:100:N, :3] - z_GNSS[:GNSSk], axis=1),
+    np.linalg.norm(x_true[99:N:100, :3] - z_GNSS[:GNSSk], axis=1),
 )
 axs4[0].set(ylabel="Position error [m]")
 axs4[0].legend(
     [
         f"Estimation error ({np.sqrt(np.mean(np.sum(delta_x[:N, POS_IDX]**2, axis=1)))})",
-        f"Measurement error ({np.sqrt(np.mean(np.sum((x_true[99:100:N, POS_IDX] - z_GNSS[GNSSk - 1])**2, axis=1)))})",
+        f"Measurement error ({np.sqrt(np.mean(np.sum((x_true[99:100:N, POS_IDX] - z_GNSS[:GNSSk - 1])**2, axis=1)))})",
     ]
 )
 
