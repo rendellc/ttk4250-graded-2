@@ -5,7 +5,10 @@ import scipy.stats
 
 import matplotlib
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
+
+import pickle
 
 try: # see if tqdm is available, otherwise define it as a dummy
     try: # Ipython seem to require different tqdm.. try..except seem to be the easiest way to check
@@ -174,7 +177,7 @@ x_pred[0, 6] = 1  # no initial rotation: nose to North, right to East, and belly
 
 # These have to be set reasonably to get good results
 P_pred[0][POS_IDX ** 2] = 10**2 * np.eye(3)# TODO
-P_pred[0][VEL_IDX ** 2] = 5**2 * np.eye(3)# TODO
+P_pred[0][VEL_IDX ** 2] = 10**2 * np.eye(3)# TODO
 P_pred[0][ERR_ATT_IDX ** 2] = np.eye(3)# TODO # error rotation vector (not quat)
 P_pred[0][ERR_ACC_BIAS_IDX ** 2] = np.eye(3)# TODO
 P_pred[0][ERR_GYRO_BIAS_IDX ** 2] = np.eye(3)# TODO
@@ -185,7 +188,7 @@ dummy = eskf.update_GNSS_position(x_pred[0], P_pred[0], z_GNSS[0], R_GNSS, lever
 # %% Run estimation
 # run this file with 'python -O run_INS_simulated.py' to turn of assertions and get about 8/5 speed increase for longer runs
 
-N: int = 500 #steps # TODO: choose a small value to begin with (500?), and gradually increase as you OK results
+N: int = int(0.1*steps)
 doGNSS: bool = True  # TODO: Set this to False if you want to check that the predictions make sense over reasonable time lenghts
 
 GNSSk: int = 0  # keep track of current step in GNSS measurements
@@ -219,17 +222,54 @@ for k in tqdm.trange(N):
         assert np.all(np.isfinite(P_pred[k])), f"Not finite P_pred at index {k + 1}"
 
 
+# pickle results
+results = {
+        "dt": dt,
+        "steps": steps,
+        "cont_gyro_noise_std": cont_gyro_noise_std,
+        "cont_acc_noise_std": cont_acc_noise_std,
+        "rate_std": rate_std,
+        "acc_std": acc_std,
+        "rate_bias_driving_noise_std": rate_bias_driving_noise_std,
+        "cont_rate_bias_driving_noise_std": cont_rate_bias_driving_noise_std,
+        "acc_bias_driving_noise_std": acc_bias_driving_noise_std,
+        "cont_acc_bias_driving_noise_std": cont_acc_bias_driving_noise_std,
+        "p_std": p_std,
+        "R_GNSS": R_GNSS,
+        "p_acc": p_acc,
+        "p_gyro": p_gyro,
+        "doGNSS": doGNSS,
+        "N": N,
+        "x_est": x_est,
+        "P_est": P_est,
+        "x_pred": x_pred,
+        "P_pred": P_pred,
+        "delta_x": delta_x,
+        "NIS": NIS,
+        "NEES_all": NEES_all,
+        "NEES_pos": NEES_pos,
+        "NEES_vel": NEES_vel,
+        "NEES_att": NEES_att,
+        "NEES_accbias": NEES_accbias,
+        "NEES_gyrobias": NEES_gyrobias,
+}
+pickle.dump(results, open(f"results/simulated_{N}.pickle", "wb"))
+
 # %% Plots
+figdir = "figs/simulated/"
+dosavefigures = False
 
 fig1 = plt.figure(1)
-ax = plt.axes(projection="3d")
+#ax = plt.axes(projection="3d")
+ax = fig1.add_subplot(1,1,1,projection='3d')
 
 ax.plot3D(x_est[:N, 1], x_est[:N, 0], -x_est[:N, 2])
 ax.plot3D(z_GNSS[:GNSSk, 1], z_GNSS[:GNSSk, 0], -z_GNSS[:GNSSk, 2])
 ax.set_xlabel("East [m]")
 ax.set_ylabel("North [m]")
 ax.set_zlabel("Altitude [m]")
-
+#fig1.tight_layout()
+if dosavefigures: fig1.savefig(figdir+"ned.pdf")
 
 # state estimation
 t = np.linspace(0, dt * (N - 1), N)
@@ -262,8 +302,9 @@ axs2[4].plot(t, x_est[:N, GYRO_BIAS_IDX] * 180 / np.pi * 3600)
 axs2[4].set(ylabel="Gyro bias [deg/h]")
 axs2[4].legend(["$x$", "$y$", "$z$"])
 
-
 fig2.suptitle("States estimates")
+#fig2.tight_layout()
+if dosavefigures: fig2.savefig(figdir+"state_estimates.pdf")
 
 # state error plots
 fig3, axs3 = plt.subplots(5, 1, num=3, clear=True)
@@ -322,6 +363,8 @@ axs3[4].legend(
 )
 
 fig3.suptitle("States estimate errors")
+# fig3.tight_layout()
+if dosavefigures: fig3.savefig(figdir+"state_estimate_errors.pdf")
 
 # Error distance plot
 fig4, axs4 = plt.subplots(2, 1, num=4, clear=True)
@@ -343,6 +386,8 @@ axs4[1].plot(t, np.linalg.norm(delta_x[:N, VEL_IDX], axis=1))
 axs4[1].set(ylabel="Speed error [m/s]")
 axs4[1].legend([f"RMSE: {np.sqrt(np.mean(np.sum(delta_x[:N, VEL_IDX]**2, axis=0)))}"])
 
+#fig4.tight_layout()
+if dosavefigures: fig4.savefig(figdir+"error_distance_plot.pdf")
 
 # %% Consistency
 confprob = 0.95
@@ -407,6 +452,9 @@ axs5[6].set(
 )
 axs5[6].set_ylim([0, 20])
 
+#fig5.tight_layout()
+if dosavefigures: fig5.savefig(figdir+"nees_nis.pdf")
+
 # boxplot
 fig6, axs6 = plt.subplots(1, 3)
 
@@ -425,5 +473,8 @@ axs6[2].boxplot([NEES_pos[0:N].T, NEES_vel[0:N].T, NEES_att[0:N].T, NEES_accbias
 axs6[2].legend(['NEES pos', 'NEES vel', 'NEES att', 'NEES accbias', 'NEES gyrobias', 'gauss (3 dim)'])
 plt.grid()
 
+#fig6.tight_layout()
+if dosavefigures: fig6.savefig(figdir+"boxplot.pdf")
 
 # %%
+plt.show(block=False)
