@@ -253,7 +253,7 @@ data = dict(
     NEES_gyrobias=NEES_gyrobias)
 pickle.dump(data, open(f"results/simulated_{N}.pickle", "wb"))
 
-# plotting
+# %% plotting
 dosavefigures = False
 doplothandout = True
 
@@ -264,6 +264,8 @@ if doplothandout:
     ax = fig1.add_subplot(1,1,1, projection='3d')
 
     ax.plot3D(x_est[:N, 1], x_est[:N, 0], -x_est[:N, 2])
+    ax.plot3D(x_true[:N, 1], x_true[:N, 0], -x_true[:N, 2])
+
     ax.plot3D(z_GNSS[:GNSSk, 1], z_GNSS[:GNSSk, 0], -z_GNSS[:GNSSk, 2])
     ax.set_xlabel("East [m]")
     ax.set_ylabel("North [m]")
@@ -392,7 +394,7 @@ if doplothandout:
 
     axs5[0].plot(t, (NEES_all[:N]).T)
     axs5[0].plot(np.array([0, N - 1]) * dt, (CI15 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI15[0] <= NEES_all) * (NEES_all <= CI15[1]))
+    insideCI = np.mean((CI15[0] <= NEES_all[:N]) * (NEES_all[:N] <= CI15[1]))
     axs5[0].set(
         title=f"Total NEES ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
     )
@@ -400,7 +402,7 @@ if doplothandout:
 
     axs5[1].plot(t, (NEES_pos[0:N]).T)
     axs5[1].plot(np.array([0, N - 1]) * dt, (CI3 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI3[0] <= NEES_pos) * (NEES_pos <= CI3[1]))
+    insideCI = np.mean((CI3[0] <= NEES_pos[:N]) * (NEES_pos[:N] <= CI3[1]))
     axs5[1].set(
         title=f"Position NEES ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
     )
@@ -408,7 +410,7 @@ if doplothandout:
 
     axs5[2].plot(t, (NEES_vel[0:N]).T)
     axs5[2].plot(np.array([0, N - 1]) * dt, (CI3 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI3[0] <= NEES_vel) * (NEES_vel <= CI3[1]))
+    insideCI = np.mean((CI3[0] <= NEES_vel[:N]) * (NEES_vel[:N] <= CI3[1]))
     axs5[2].set(
         title=f"Velocity NEES ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
     )
@@ -416,7 +418,7 @@ if doplothandout:
 
     axs5[3].plot(t, (NEES_att[0:N]).T)
     axs5[3].plot(np.array([0, N - 1]) * dt, (CI3 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI3[0] <= NEES_att) * (NEES_att <= CI3[1]))
+    insideCI = np.mean((CI3[0] <= NEES_att[:N]) * (NEES_att[:N] <= CI3[1]))
     axs5[3].set(
         title=f"Attitude NEES ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
     )
@@ -424,7 +426,7 @@ if doplothandout:
 
     axs5[4].plot(t, (NEES_accbias[0:N]).T)
     axs5[4].plot(np.array([0, N - 1]) * dt, (CI3 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI3[0] <= NEES_accbias) * (NEES_accbias <= CI3[1]))
+    insideCI = np.mean((CI3[0] <= NEES_accbias[:N]) * (NEES_accbias[:N] <= CI3[1]))
     axs5[4].set(
         title=f"Accelerometer NEES ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
     )
@@ -432,7 +434,7 @@ if doplothandout:
 
     axs5[5].plot(t, (NEES_gyrobias[0:N]).T)
     axs5[5].plot(np.array([0, N - 1]) * dt, (CI3 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI3[0] <= NEES_gyrobias) * (NEES_gyrobias <= CI3[1]))
+    insideCI = np.mean((CI3[0] <= NEES_gyrobias[:N]) * (NEES_gyrobias[:N] <= CI3[1]))
     axs5[5].set(
         title=f"Gyro bias NEES ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
     )
@@ -440,7 +442,7 @@ if doplothandout:
 
     axs5[6].plot(NIS[:GNSSk])
     axs5[6].plot(np.array([0, N - 1]) * dt, (CI3 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI3[0] <= NIS) * (NIS <= CI3[1]))
+    insideCI = np.mean((CI3[0] <= NIS[:GNSSk]) * (NIS[GNSSk] <= CI3[1]))
     axs5[6].set(
         title=f"NIS ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
     )
