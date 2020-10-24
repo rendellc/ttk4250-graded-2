@@ -105,9 +105,9 @@ def quaternion_to_euler(quaternion: np.ndarray) -> np.ndarray:
 
     quaternion_squared = quaternion ** 2
 
-    phi = np.arctan2(2*(quaternion[3]*quaternion[2]) + quaternion[0]*quaternion[1], quaternion_squared[0] - quaternion_squared[1] - quaternion_squared[2] + quaternion_squared[3])
-    theta = np.arcsin(2 * (quaternion[0]*quaternion[2]) - quaternion[1]*quaternion[3])
-    psi = np.arctan2(2*(quaternion[1]*quaternion[2]) + quaternion[0]*quaternion[3], quaternion_squared[0] + quaternion_squared[1] - quaternion_squared[2] - quaternion_squared[3])
+    phi = np.arctan2(2 * (quaternion[3]*quaternion[2] + quaternion[0]*quaternion[1]), quaternion_squared[0] - quaternion_squared[1] - quaternion_squared[2] + quaternion_squared[3])
+    theta = np.arcsin(2 * (quaternion[0]*quaternion[2] - quaternion[1]*quaternion[3]))
+    psi = np.arctan2(2 * (quaternion[1]*quaternion[2] + quaternion[0]*quaternion[3]), quaternion_squared[0] + quaternion_squared[1] - quaternion_squared[2] - quaternion_squared[3])
 
     euler_angles = np.array([phi, theta, psi])
     assert euler_angles.shape == (

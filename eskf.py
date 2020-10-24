@@ -113,13 +113,14 @@ class ESKF:
             ), "ESKF.predict_nominal: Quaternion not normalized and norm failed to catch it."
 
         R = quaternion_to_rotation_matrix(quaternion, debug=self.debug)
-        acceleration_world = R @ acceleration
-        omega_world = R @ omega
+        g = np.array([0,0,9.81])
+        acceleration_world = R @ acceleration + g
+        # omega_world = R @ omega
 
         position_prediction = position + Ts*velocity + Ts**2/2 * acceleration_world
         velocity_prediction = velocity + Ts*acceleration_world
 
-        kappa = Ts * omega_world
+        kappa = Ts * omega
         kappa_norm = la.norm(kappa)
         delta_quat = np.array([np.cos(kappa_norm/2), *(np.sin(kappa_norm/2) * kappa.T/kappa_norm)])
         quaternion_prediction = quaternion_product(quaternion, delta_quat)
