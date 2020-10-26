@@ -145,7 +145,7 @@ eskf = ESKF(
     p_gyro,
     S_a = S_a, # set the accelerometer correction matrix
     S_g = S_g, # set the gyro correction matrix,
-    debug=True # False to avoid expensive debug checks
+    debug=False # False to avoid expensive debug checks
 )
 
 
@@ -159,8 +159,8 @@ P_pred = np.zeros((steps, 15, 15))
 NIS = np.zeros(gnss_steps)
 
 # %% Initialise
-x_pred[0, POS_IDX] = np.array([0, 0, -5]) # starting 5 metres above ground
-x_pred[0, VEL_IDX] = np.array([20, 0, 0]) # starting at 20 m/s due north
+x_pred[0, POS_IDX] = np.array([0, 0, 0]) # starting 5 metres above ground
+x_pred[0, VEL_IDX] = np.array([0, 0, 0]) # starting at 20 m/s due north
 x_pred[0, ATT_IDX] = np.array([
     np.cos(45 * np.pi / 180),
     0, 0,
@@ -175,7 +175,19 @@ P_pred[0][ERR_GYRO_BIAS_IDX**2] = (1e-3)**2 * np.eye(3)
 
 # %% Run estimation
 
-N = 3000 #steps
+start = 52000
+N = 10000 #steps
+
+startGNSS = int(start*dt)
+
+timeGNSS = timeGNSS[startGNSS:]
+timeIMU = timeIMU[start:]
+z_acceleration = z_acceleration[start:]
+z_GNSS = z_GNSS[startGNSS:]
+z_gyroscope = z_gyroscope[start:]
+accuracy_GNSS = accuracy_GNSS[startGNSS:]
+Ts_IMU = Ts_IMU[start:]
+
 GNSSk = 0
 
 for k in tqdm(range(N)):
