@@ -333,9 +333,9 @@ if doplothandout:
     axs3[2].set(ylabel="Euler angles error [deg]")
     axs3[2].legend(
         [
-            rf"$\phi$ ({np.sqrt(np.mean((eul_error[:N, 0] * 180 / np.pi)**2))})",
-            rf"$\theta$ ({np.sqrt(np.mean((eul_error[:N, 1] * 180 / np.pi)**2))})",
-            rf"$\psi$ ({np.sqrt(np.mean((eul_error[:N, 2] * 180 / np.pi)**2))})",
+            rf"$\phi$ ({np.sqrt(np.mean((eul_error[:N, 0])**2))})",
+            rf"$\theta$ ({np.sqrt(np.mean((eul_error[:N, 1])**2))})",
+            rf"$\psi$ ({np.sqrt(np.mean((eul_error[:N, 2])**2))})",
         ]
     )
 
@@ -380,7 +380,7 @@ if doplothandout:
 
     axs4[1].plot(t, np.linalg.norm(delta_x[:N, VEL_IDX], axis=1))
     axs4[1].set(ylabel="Speed error [m/s]")
-    axs4[1].legend([f"RMSE: {np.sqrt(np.mean(np.sum(delta_x[:N, VEL_IDX]**2, axis=0)))}"])
+    axs4[1].legend([f"RMSE: {np.sqrt(np.mean(np.sum(delta_x[:N, VEL_IDX]**2, axis=1)))}"])
 
     #fig4.tight_layout()
     if dosavefigures: fig4.savefig(figdir+"error_distance_plot.pdf")
