@@ -265,7 +265,7 @@ class ESKF:
             30,
             30,
         ), f"ESKF.discrete_error_matrices: Van Loan matrix shape incorrect {omega.shape}"
-        VanLoanMatrix = la.expm(V)  # np.eye(30) + V + V@V/2
+        VanLoanMatrix =  np.eye(30) + V + V@V/2 #la.expm(V)  #
 
         Ad = VanLoanMatrix[CatSlice(15,30)**2].T
         GQGd = Ad @ VanLoanMatrix[CatSlice(0,15)*CatSlice(15,30)]
