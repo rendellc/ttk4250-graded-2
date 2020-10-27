@@ -176,15 +176,16 @@ x_pred[0, 6] = 1  # no initial rotation: nose to North, right to East, and belly
 
 # These have to be set reasonably to get good results
 P_pred[0][POS_IDX ** 2] = 10**2 * np.eye(3)
-P_pred[0][VEL_IDX ** 2] = 10**2 * np.eye(3)
+P_pred[0][VEL_IDX ** 2] = 5**2 * np.eye(3)
 P_pred[0][ERR_ATT_IDX ** 2] = np.eye(3)
-P_pred[0][ERR_ACC_BIAS_IDX ** 2] = 0.01 * np.eye(3)
-P_pred[0][ERR_GYRO_BIAS_IDX ** 2] = 0.01 * np.eye(3)
+P_pred[0][ERR_ACC_BIAS_IDX ** 2] = 0.1 * np.eye(3)
+P_pred[0][ERR_GYRO_BIAS_IDX ** 2] = 0.1 * np.eye(3)
 
 # %% Run estimation
 # run this file with 'python -O run_INS_simulated.py' to turn of assertions and get about 8/5 speed increase for longer runs
 
-N: int = 5000
+
+N: int = 10000
 doGNSS: bool = True  # TODO: Set this to False if you want to check that the predictions make sense over reasonable time lenghts
 
 GNSSk: int = 0  # keep track of current step in GNSS measurements
@@ -393,7 +394,7 @@ if doplothandout:
     CI15N = np.array(scipy.stats.chi2.interval(confprob, 15 * N)) / N
 
 
-    ANIS = NIS[:N].mean()
+    ANIS = NIS[:GNSSk].mean()
     ANEES = NEES_all[:N].mean()
     ANEES_pos = NEES_pos[:N].mean()
     ANEES_vel = NEES_vel[:N].mean()
