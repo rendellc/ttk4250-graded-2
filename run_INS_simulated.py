@@ -389,6 +389,30 @@ if doplothandout:
     confprob = 0.95
     CI15 = np.array(scipy.stats.chi2.interval(confprob, 15)).reshape((2, 1))
     CI3 = np.array(scipy.stats.chi2.interval(confprob, 3)).reshape((2, 1))
+    CI3N = np.array(scipy.stats.chi2.interval(confprob, 3 * N)) / N
+    CI15N = np.array(scipy.stats.chi2.interval(confprob, 15 * N)) / N
+
+
+    ANIS = NIS[:N].mean()
+    ANEES = NEES_all[:N].mean()
+    ANEES_pos = NEES_pos[:N].mean()
+    ANEES_vel = NEES_vel[:N].mean()
+    ANEES_att = NEES_att[:N].mean()
+    ANEES_accbias = NEES_accbias[:N].mean()
+    ANEES_gyrobias = NEES_gyrobias[:N].mean()
+
+    
+
+    print(rf'{"ANEES:":<20} {ANEES:^25} {CI15N}')
+    print(rf'{"ANEESS_pos:":<20} {ANEES_pos:^25} {CI3N}')
+    print(rf'{"ANEES_vel:":<20} {ANEES_vel:^25} {CI3N}')
+    print(rf'{"ANEES_att:":<20} {ANEES_att:^25} {CI3N}')
+    print(rf'{"ANEES_accbias:":<20} {ANEES_accbias:^25} {CI3N}')
+    print(rf'{"ANEES_gyrobias:":<20} {ANEES_gyrobias:^25} {CI3N}')
+
+    print(rf'{"ANIS:":<20} {ANIS:^25} {CI3N}')
+
+
 
     fig5, axs5 = plt.subplots(7, 1, num=5, clear=True)
 
@@ -442,7 +466,7 @@ if doplothandout:
 
     axs5[6].plot(NIS[:GNSSk])
     axs5[6].plot(np.array([0, N - 1]) * dt, (CI3 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI3[0] <= NIS[:GNSSk]) * (NIS[GNSSk] <= CI3[1]))
+    insideCI = np.mean((CI3[0] <= NIS[:GNSSk]) * (NIS[:GNSSk] <= CI3[1]))
     axs5[6].set(
         title=f"NIS ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
     )
