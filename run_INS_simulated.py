@@ -135,8 +135,8 @@ cont_acc_bias_driving_noise_std = 6 * acc_bias_driving_noise_std / np.sqrt(1 / d
 p_std = np.array([0.3, 0.3, 0.5])  # Measurement noise
 R_GNSS = np.diag(p_std ** 2)
 
-p_acc = 1e-16
-p_gyro = 1e-16
+p_acc = 1e-8
+p_gyro = 1e-8
 
 # %% Estimator
 eskf = ESKF(
@@ -148,7 +148,7 @@ eskf = ESKF(
     p_gyro,
     S_a=S_a, # set the accelerometer correction matrix
     S_g=S_g, # set the gyro correction matrix,
-    debug=True # TODO: False to avoid expensive debug checks, can also be suppressed by calling 'python -O run_INS_simulated.py'
+    debug=False # TODO: False to avoid expensive debug checks, can also be suppressed by calling 'python -O run_INS_simulated.py'
 )
 
 # %% Allocate
@@ -175,21 +175,22 @@ x_pred[0, VEL_IDX] = np.array([20, 0, 0])  # starting at 20 m/s due north
 x_pred[0, 6] = 1  # no initial rotation: nose to North, right to East, and belly down
 
 # These have to be set reasonably to get good results
-P_pred[0][POS_IDX ** 2] = 10**2 * np.eye(3)
+P_pred[0][POS_IDX ** 2] = 5**2 * np.eye(3)
 P_pred[0][VEL_IDX ** 2] = 5**2 * np.eye(3)
-P_pred[0][ERR_ATT_IDX ** 2] = np.eye(3)
-P_pred[0][ERR_ACC_BIAS_IDX ** 2] = 0.1 * np.eye(3)
-P_pred[0][ERR_GYRO_BIAS_IDX ** 2] = 0.1 * np.eye(3)
+P_pred[0][ERR_ATT_IDX ** 2] = np.diag([np.pi/30, np.pi/30, np.pi/3])**2 
+P_pred[0][ERR_ACC_BIAS_IDX ** 2] = 0.056**2 * np.eye(3)
+P_pred[0][ERR_GYRO_BIAS_IDX ** 2] = 0.05**2 * np.eye(3)
 
 # %% Run estimation
 # run this file with 'python -O run_INS_simulated.py' to turn of assertions and get about 8/5 speed increase for longer runs
 
 
-N: int = 10000
+N: int = steps #10000
 doGNSS: bool = True  # TODO: Set this to False if you want to check that the predictions make sense over reasonable time lenghts
 
 GNSSk: int = 0  # keep track of current step in GNSS measurements
 for k in tqdm.trange(N):
+
     if doGNSS and timeIMU[k] >= timeGNSS[GNSSk]:
         NIS[GNSSk] = eskf.NIS_GNSS_position(x_pred[k], P_pred[k], z_GNSS[GNSSk], R_GNSS, lever_arm)
 
@@ -202,6 +203,9 @@ for k in tqdm.trange(N):
         x_est[k] = x_pred[k]
         P_est[k] = P_pred[k]
         
+    if x_est[k, 6] < 0:
+        x_est[k, ATT_IDX] = -x_est[k, ATT_IDX]
+
     delta_x[k] = eskf.delta_x(x_est[k], x_true[k])
     (
         NEES_all[k],
@@ -217,6 +221,7 @@ for k in tqdm.trange(N):
 
     if eskf.debug:
         assert np.all(np.isfinite(P_pred[k])), f"Not finite P_pred at index {k + 1}"
+        
 
 
 # pickle results
@@ -496,6 +501,11 @@ if doplothandout:
 
     #fig6.tight_layout()
     if dosavefigures: fig6.savefig(figdir+"boxplot.pdf")
+
+    def plot_NEES(delta_x, P, t, state_indices):
+        NEES = [eskf._NEES(P[k][state_indices**2], delta_x[k][state_indices]) for k in range(len(t))]
+        plt.figure()
+        plt.plot(t,NEES)
 
 else:
     import matplotlib.colors as mcolors
