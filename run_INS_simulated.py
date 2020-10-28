@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 
-import pickle
+import plotutils as plot
 
 try: # see if tqdm is available, otherwise define it as a dummy
     try: # Ipython seem to require different tqdm.. try..except seem to be the easiest way to check
@@ -111,295 +111,123 @@ dt = np.mean(np.diff(timeIMU))
 steps = len(z_acceleration)
 gnss_steps = len(z_GNSS)
 
-# %% Measurement noise
-# IMU noise values for STIM300, based on datasheet and simulation sample rate
-# Continous noise
-# TODO: What to remove here?
-cont_gyro_noise_std = 4.36e-5  # (rad/s)/sqrt(Hz)
-cont_acc_noise_std = 1.167e-3  # (m/s**2)/sqrt(Hz)
 
-# Discrete sample noise at simulation rate used
-rate_std = 0.5 * cont_gyro_noise_std * np.sqrt(1 / dt) # Hvorfor gange med en halv? (eq. 10.70)
-acc_std = 0.5 * cont_acc_noise_std * np.sqrt(1 / dt)
+def run_experiment(parameters):
+    # read parameters
+    cont_gyro_noise_std = parameters["cont_gyro_noise_std"]
+    cont_acc_noise_std = parameters["cont_acc_noise_std"]
+    rate_std_factor = parameters["rate_std_factor"]
+    acc_std_factor = parameters["acc_std_factor"]
+    rate_bias_driving_noise_std = parameters["rate_bias_driving_noise_std"]
+    cont_rate_bias_factor = parameters["cont_rate_bias_factor"]
+    acc_bias_driving_noise_std = parameters["acc_bias_driving_noise_std"]
+    cont_acc_bias_factor = parameters["cont_acc_bias_factor"]
+    p_acc = parameters["p_acc"]
+    p_gyro = parameters["p_gyro"]
+    p_std = parameters["p_std"]
+    sigma_pos = parameters["sigma_pos"]
+    sigma_vel = parameters["sigma_vel"]
+    sigma_err_acc_bias = parameters["sigma_err_acc_bias"]
+    sigma_err_gyro_bias = parameters["sigma_err_gyro_bias"]
+    N = parameters["N"]
+    doGNSS = parameters["doGNSS"]
+    debug = parameters["debug"]
+    dosavefigures = parameters["dosavefigures"]
+    figdir = parameters["figdir"]
+    doshowplot = parameters["doshowplot"]
 
-# Bias values
-rate_bias_driving_noise_std = 5e-5
-cont_rate_bias_driving_noise_std = (
-    (1) * rate_bias_driving_noise_std / np.sqrt(1 / dt)
-)
+    # derived parameters
+    rate_std = rate_std_factor * cont_gyro_noise_std * np.sqrt(1 / dt) # Hvorfor gange med en halv? (eq. 10.70)
+    acc_std = acc_std_factor * cont_acc_noise_std * np.sqrt(1 / dt)
+    cont_rate_bias_driving_noise_std = cont_rate_bias_factor * rate_bias_driving_noise_std / np.sqrt(1 / dt)
+    cont_acc_bias_driving_noise_std = cont_acc_bias_factor * acc_bias_driving_noise_std / np.sqrt(1 / dt)
+    R_GNSS = np.diag(p_std ** 2)
 
-acc_bias_driving_noise_std = 4e-3
-cont_acc_bias_driving_noise_std = 6 * acc_bias_driving_noise_std / np.sqrt(1 / dt)
+    # %% Estimator
+    eskf = ESKF(
+        acc_std,
+        rate_std,
+        cont_acc_bias_driving_noise_std,
+        cont_rate_bias_driving_noise_std,
+        p_acc,
+        p_gyro,
+        S_a=S_a, # set the accelerometer correction matrix
+        S_g=S_g, # set the gyro correction matrix,
+        debug=debug # TODO: False to avoid expensive debug checks, can also be suppressed by calling 'python -O run_INS_simulated.py'
+    )
 
-# Position and velocity measurement
-p_std = np.array([0.3, 0.3, 0.5])  # Measurement noise
-R_GNSS = np.diag(p_std ** 2)
+    # %% Allocate
+    x_est = np.zeros((steps, 16))
+    P_est = np.zeros((steps, 15, 15))
 
-p_acc = 1e-16
-p_gyro = 1e-16
+    x_pred = np.zeros((steps, 16))
+    P_pred = np.zeros((steps, 15, 15))
 
-# %% Estimator
-eskf = ESKF(
-    acc_std,
-    rate_std,
-    cont_acc_bias_driving_noise_std,
-    cont_rate_bias_driving_noise_std,
-    p_acc,
-    p_gyro,
-    S_a=S_a, # set the accelerometer correction matrix
-    S_g=S_g, # set the gyro correction matrix,
-    debug=False # TODO: False to avoid expensive debug checks, can also be suppressed by calling 'python -O run_INS_simulated.py'
-)
+    delta_x = np.zeros((steps, 15))
 
-# %% Allocate
-x_est = np.zeros((steps, 16))
-P_est = np.zeros((steps, 15, 15))
+    NIS = np.zeros(gnss_steps)
+    NIS_x = np.zeros(gnss_steps)
+    NIS_y = np.zeros(gnss_steps)
+    NIS_z = np.zeros(gnss_steps)
+    NIS_xy = np.zeros(gnss_steps)
 
-x_pred = np.zeros((steps, 16))
-P_pred = np.zeros((steps, 15, 15))
+    NEES_all = np.zeros(steps)
+    NEES_pos = np.zeros(steps)
+    NEES_vel = np.zeros(steps)
+    NEES_att = np.zeros(steps)
+    NEES_accbias = np.zeros(steps)
+    NEES_gyrobias = np.zeros(steps)
 
-delta_x = np.zeros((steps, 15))
+    # %% Initialise
+    x_pred[0, POS_IDX] = np.array([0, 0, -5])  # starting 5 metres above ground
+    x_pred[0, VEL_IDX] = np.array([20, 0, 0])  # starting at 20 m/s due north
+    x_pred[0, 6] = 1  # no initial rotation: nose to North, right to East, and belly down
 
-NIS = np.zeros(gnss_steps)
-NIS_x = np.zeros(gnss_steps)
-NIS_y = np.zeros(gnss_steps)
-NIS_z = np.zeros(gnss_steps)
-NIS_xy = np.zeros(gnss_steps)
+    # These have to be set reasonably to get good results
+    P_pred[0][POS_IDX ** 2] = sigma_pos**2 * np.eye(3)
+    P_pred[0][VEL_IDX ** 2] = sigma_vel**2 * np.eye(3)
+    P_pred[0][ERR_ATT_IDX ** 2] = np.diag([np.pi/30, np.pi/30, np.pi/3])**2 
+    P_pred[0][ERR_ACC_BIAS_IDX ** 2] = sigma_err_acc_bias**2 * np.eye(3)
+    P_pred[0][ERR_GYRO_BIAS_IDX ** 2] = sigma_err_gyro_bias**2 * np.eye(3)
 
-NEES_all = np.zeros(steps)
-NEES_pos = np.zeros(steps)
-NEES_vel = np.zeros(steps)
-NEES_att = np.zeros(steps)
-NEES_accbias = np.zeros(steps)
-NEES_gyrobias = np.zeros(steps)
+    # %% Run estimation
+    # run this file with 'python -O run_INS_simulated.py' to turn of assertions and get about 8/5 speed increase for longer runs
 
-# %% Initialise
-x_pred[0, POS_IDX] = np.array([0, 0, -5])  # starting 5 metres above ground
-x_pred[0, VEL_IDX] = np.array([20, 0, 0])  # starting at 20 m/s due north
-x_pred[0, 6] = 1  # no initial rotation: nose to North, right to East, and belly down
+    GNSSk: int = 0  # keep track of current step in GNSS measurements
+    for k in tqdm.trange(N):
+        if doGNSS and timeIMU[k] >= timeGNSS[GNSSk]:
+            (
+                NIS[GNSSk], 
+                NIS_x[GNSSk],
+                NIS_y[GNSSk],
+                NIS_z[GNSSk],
+                NIS_xy[GNSSk],
+            )  = eskf.NIS_GNSS_position(x_pred[k], P_pred[k], z_GNSS[GNSSk], R_GNSS, lever_arm)
 
-# These have to be set reasonably to get good results
-P_pred[0][POS_IDX ** 2] = 5**2 * np.eye(3)
-P_pred[0][VEL_IDX ** 2] = 5**2 * np.eye(3)
-P_pred[0][ERR_ATT_IDX ** 2] = np.diag([np.pi/30, np.pi/30, np.pi/3])**2 
-P_pred[0][ERR_ACC_BIAS_IDX ** 2] = 0.01**2 * np.eye(3)
-P_pred[0][ERR_GYRO_BIAS_IDX ** 2] = 0.001**2 * np.eye(3)
+            x_est[k], P_est[k] = eskf.update_GNSS_position(x_pred[k], P_pred[k], z_GNSS[GNSSk], R_GNSS, lever_arm)
+            assert np.all(np.isfinite(P_est[k])), f"Not finite P_pred at index {k}"
+            
+            GNSSk += 1
+        else:
+            # no updates, so let us take estimate = prediction
+            x_est[k] = x_pred[k]
+            P_est[k] = P_pred[k]
 
-# %% Run estimation
-# run this file with 'python -O run_INS_simulated.py' to turn of assertions and get about 8/5 speed increase for longer runs
-
-
-N: int = steps #10000
-doGNSS: bool = True  # TODO: Set this to False if you want to check that the predictions make sense over reasonable time lenghts
-
-GNSSk: int = 0  # keep track of current step in GNSS measurements
-for k in tqdm.trange(N):
-
-    if doGNSS and timeIMU[k] >= timeGNSS[GNSSk]:
+        delta_x[k] = eskf.delta_x(x_est[k], x_true[k])
         (
-            NIS[GNSSk], 
-            NIS_x[GNSSk],
-            NIS_y[GNSSk],
-            NIS_z[GNSSk],
-            NIS_xy[GNSSk],
-        )  = eskf.NIS_GNSS_position(x_pred[k], P_pred[k], z_GNSS[GNSSk], R_GNSS, lever_arm)
+            NEES_all[k],
+            NEES_pos[k],
+            NEES_vel[k],
+            NEES_att[k],
+            NEES_accbias[k],
+            NEES_gyrobias[k],
+        ) = eskf.NEESes(x_est[k], P_est[k], x_true[k])
 
-        x_est[k], P_est[k] = eskf.update_GNSS_position(x_pred[k], P_pred[k], z_GNSS[GNSSk], R_GNSS, lever_arm)
-        assert np.all(np.isfinite(P_est[k])), f"Not finite P_pred at index {k}"
-        
-        GNSSk += 1
-    else:
-        # no updates, so let us take estimate = prediction
-        x_est[k] = x_pred[k]
-        P_est[k] = P_pred[k]
-        
-    # if x_est[k, 6] < 0:
-    #    x_est[k, ATT_IDX] = -x_est[k, ATT_IDX]
+        if k < N - 1:
+            x_pred[k + 1], P_pred[k + 1] = eskf.predict(x_est[k], P_est[k], z_acceleration[k+1], z_gyroscope[k+1], Ts_IMU[k+1])
 
-    delta_x[k] = eskf.delta_x(x_est[k], x_true[k])
-    (
-        NEES_all[k],
-        NEES_pos[k],
-        NEES_vel[k],
-        NEES_att[k],
-        NEES_accbias[k],
-        NEES_gyrobias[k],
-    ) = eskf.NEESes(x_est[k], P_est[k], x_true[k])
-
-    if k < N - 1:
-        x_pred[k + 1], P_pred[k + 1] = eskf.predict(x_est[k], P_est[k], z_acceleration[k+1], z_gyroscope[k+1], Ts_IMU[k+1])
-
-    if eskf.debug:
-        assert np.all(np.isfinite(P_pred[k])), f"Not finite P_pred at index {k + 1}"
-        
-
-
-# pickle results
-data = dict(
-    cont_gyro_noise_std=cont_gyro_noise_std,
-    cont_acc_noise_std=cont_acc_noise_std,
-    rate_std=rate_std,
-    acc_std=acc_std,
-    rate_bias_driving_noise_std=rate_bias_driving_noise_std,
-    cont_rate_bias_driving_noise_std=cont_rate_bias_driving_noise_std,
-    acc_bias_driving_noise_std=acc_bias_driving_noise_std,
-    cont_acc_bias_driving_noise_std=cont_acc_bias_driving_noise_std,
-    p_std=p_std,
-    R_GNSS=R_GNSS,
-    p_acc=p_acc,
-    p_gyro=p_gyro,
-    dt=dt,
-    steps=steps,
-    x_true=x_true,
-    z_GNSS=z_GNSS,
-    N=N,
-    GNSSk=GNSSk,
-    doGNSS=doGNSS,
-    delta_x=delta_x,
-    x_est=x_est,
-    P_est=P_est,
-    x_pred=x_pred,
-    P_pred=P_pred,
-    NIS=NIS,
-    NEES_all=NEES_all,
-    NEES_pos=NEES_pos,
-    NEES_vel=NEES_vel,
-    NEES_att=NEES_att,
-    NEES_accbias=NEES_accbias,
-    NEES_gyrobias=NEES_gyrobias)
-pickle.dump(data, open(f"results/simulated_{N}.pickle", "wb"))
-
-# %% plotting
-dosavefigures = False
-doplothandout = True
-
-t = np.linspace(0, dt * (N - 1), N)
-if doplothandout:
-    # 3d position plot
-    fig1 = plt.figure(1)
-    ax = fig1.add_subplot(1,1,1, projection='3d')
-
-    ax.plot3D(x_est[:N, 1], x_est[:N, 0], -x_est[:N, 2])
-    ax.plot3D(x_true[:N, 1], x_true[:N, 0], -x_true[:N, 2])
-
-    ax.plot3D(z_GNSS[:GNSSk, 1], z_GNSS[:GNSSk, 0], -z_GNSS[:GNSSk, 2])
-    ax.set_xlabel("East [m]")
-    ax.set_ylabel("North [m]")
-    ax.set_zlabel("Altitude [m]")
-    #fig1.tight_layout()
-    if dosavefigures: fig1.savefig(figdir+"ned.pdf")
-
-    # state estimation
-    eul = np.apply_along_axis(quaternion_to_euler, 1, x_est[:N, ATT_IDX])
-    eul_true = np.apply_along_axis(quaternion_to_euler, 1, x_true[:N, ATT_IDX])
-
-    fig2, axs2 = plt.subplots(5, 1, num=2, clear=True)
-
-    axs2[0].plot(t, x_est[:N, POS_IDX])
-    axs2[0].set(ylabel="NED position [m]")
-    axs2[0].legend(["North", "East", "Down"])
-
-    axs2[1].plot(t, x_est[:N, VEL_IDX])
-    axs2[1].set(ylabel="Velocities [m/s]")
-    axs2[1].legend(["North", "East", "Down"])
-
-    axs2[2].plot(t, eul[:N] * 180 / np.pi)
-    axs2[2].set(ylabel="Euler angles [deg]")
-    axs2[2].legend([r"$\phi$", r"$\theta$", r"$\psi$"])
-
-    axs2[3].plot(t, x_est[:N, ACC_BIAS_IDX])
-    axs2[3].set(ylabel="Accl bias [m/s^2]")
-    axs2[3].legend(["$x$", "$y$", "$z$"])
-
-    axs2[4].plot(t, x_est[:N, GYRO_BIAS_IDX] * 180 / np.pi * 3600)
-    axs2[4].set(ylabel="Gyro bias [deg/h]")
-    axs2[4].legend(["$x$", "$y$", "$z$"])
-
-    fig2.suptitle("States estimates")
-    #fig2.tight_layout()
-    if dosavefigures: fig2.savefig(figdir+"state_estimates.pdf")
-
-    # state error plots
-    fig3, axs3 = plt.subplots(5, 1, num=3, clear=True)
-    delta_x_RMSE = np.sqrt(np.mean(delta_x[:N] ** 2, axis=0))  # TODO use this in legends
-    axs3[0].plot(t, delta_x[:N, POS_IDX])
-    axs3[0].set(ylabel="NED position error [m]")
-    axs3[0].legend(
-        [
-            f"North ({np.sqrt(np.mean(delta_x[:N, POS_IDX[0]]**2))})",
-            f"East ({np.sqrt(np.mean(delta_x[:N, POS_IDX[1]]**2))})",
-            f"Down ({np.sqrt(np.mean(delta_x[:N, POS_IDX[2]]**2))})",
-        ]
-    )
-
-    axs3[1].plot(t, delta_x[:N, VEL_IDX])
-    axs3[1].set(ylabel="Velocities error [m]")
-    axs3[1].legend(
-        [
-            f"North ({np.sqrt(np.mean(delta_x[:N, VEL_IDX[0]]**2))})",
-            f"East ({np.sqrt(np.mean(delta_x[:N, VEL_IDX[1]]**2))})",
-            f"Down ({np.sqrt(np.mean(delta_x[:N, VEL_IDX[2]]**2))})",
-        ]
-    )
-
-    # quick wrap func
-    wrap_to_pi = lambda rads: (rads + np.pi) % (2 * np.pi) - np.pi
-    eul_error = wrap_to_pi(eul[:N] - eul_true[:N]) * 180 / np.pi
-    axs3[2].plot(t, eul_error)
-    axs3[2].set(ylabel="Euler angles error [deg]")
-    axs3[2].legend(
-        [
-            rf"$\phi$ ({np.sqrt(np.mean((eul_error[:N, 0])**2))})",
-            rf"$\theta$ ({np.sqrt(np.mean((eul_error[:N, 1])**2))})",
-            rf"$\psi$ ({np.sqrt(np.mean((eul_error[:N, 2])**2))})",
-        ]
-    )
-
-    axs3[3].plot(t, delta_x[:N, ERR_ACC_BIAS_IDX])
-    axs3[3].set(ylabel="Accl bias error [m/s^2]")
-    axs3[3].legend(
-        [
-            f"$x$ ({np.sqrt(np.mean(delta_x[:N, ERR_ACC_BIAS_IDX[0]]**2))})",
-            f"$y$ ({np.sqrt(np.mean(delta_x[:N, ERR_ACC_BIAS_IDX[1]]**2))})",
-            f"$z$ ({np.sqrt(np.mean(delta_x[:N, ERR_ACC_BIAS_IDX[2]]**2))})",
-        ]
-    )
-
-    axs3[4].plot(t, delta_x[:N, ERR_GYRO_BIAS_IDX] * 180 / np.pi)
-    axs3[4].set(ylabel="Gyro bias error [deg/s]")
-    axs3[4].legend(
-        [
-            f"$x$ ({np.sqrt(np.mean((delta_x[:N, ERR_GYRO_BIAS_IDX[0]]* 180 / np.pi)**2))})",
-            f"$y$ ({np.sqrt(np.mean((delta_x[:N, ERR_GYRO_BIAS_IDX[1]]* 180 / np.pi)**2))})",
-            f"$z$ ({np.sqrt(np.mean((delta_x[:N, ERR_GYRO_BIAS_IDX[2]]* 180 / np.pi)**2))})",
-        ]
-    )
-
-    fig3.suptitle("States estimate errors")
-    # fig3.tight_layout()
-    if dosavefigures: fig3.savefig(figdir+"state_estimate_errors.pdf")
-
-    # Error distance plot
-    fig4, axs4 = plt.subplots(2, 1, num=4, clear=True)
-
-    pos_err = np.linalg.norm(delta_x[:N, POS_IDX], axis=1)
-    meas_err = np.linalg.norm(x_true[99:N:100, POS_IDX] - z_GNSS[:GNSSk], axis=1)
-    axs4[0].plot(t, pos_err)
-    axs4[0].plot(np.arange(0, N, 100) * dt, meas_err)
-    axs4[0].set(ylabel="Position error [m]")
-    axs4[0].legend(
-        [
-            f"Estimation error ({np.sqrt(np.mean(np.sum(delta_x[:N, POS_IDX]**2, axis=1)))})",
-            f"Measurement error ({np.sqrt(np.mean(np.sum((x_true[99:N:100, POS_IDX] - z_GNSS[:GNSSk])**2, axis=1)))})",
-        ]
-    )
-
-    axs4[1].plot(t, np.linalg.norm(delta_x[:N, VEL_IDX], axis=1))
-    axs4[1].set(ylabel="Speed error [m/s]")
-    axs4[1].legend([f"RMSE: {np.sqrt(np.mean(np.sum(delta_x[:N, VEL_IDX]**2, axis=1)))}"])
-
-    #fig4.tight_layout()
-    if dosavefigures: fig4.savefig(figdir+"error_distance_plot.pdf")
+        if eskf.debug:
+            assert np.all(np.isfinite(P_pred[k])), f"Not finite P_pred at index {k + 1}"
 
     # %% Consistency
     confprob = 0.95
@@ -410,7 +238,6 @@ if doplothandout:
     CI3N = np.array(scipy.stats.chi2.interval(confprob, 3 * N)) / N
     CI15N = np.array(scipy.stats.chi2.interval(confprob, 15 * N)) / N
 
-
     ANIS = NIS[:GNSSk].mean()
     ANEES = NEES_all[:N].mean()
     ANEES_pos = NEES_pos[:N].mean()
@@ -419,152 +246,182 @@ if doplothandout:
     ANEES_accbias = NEES_accbias[:N].mean()
     ANEES_gyrobias = NEES_gyrobias[:N].mean()
 
-    
-
     print(rf'{"ANEES:":<20} {ANEES:^25} {CI15N}')
     print(rf'{"ANEESS_pos:":<20} {ANEES_pos:^25} {CI3N}')
     print(rf'{"ANEES_vel:":<20} {ANEES_vel:^25} {CI3N}')
     print(rf'{"ANEES_att:":<20} {ANEES_att:^25} {CI3N}')
     print(rf'{"ANEES_accbias:":<20} {ANEES_accbias:^25} {CI3N}')
     print(rf'{"ANEES_gyrobias:":<20} {ANEES_gyrobias:^25} {CI3N}')
-
     print(rf'{"ANIS:":<20} {ANIS:^25} {CI3N}')
 
 
+    eul = np.apply_along_axis(quaternion_to_euler, 1, x_est[:N, ATT_IDX])
+    eul_true = np.apply_along_axis(quaternion_to_euler, 1, x_true[:N, ATT_IDX])
+    wrap_to_pi = lambda rads: (rads + np.pi) % (2 * np.pi) - np.pi
+    eul_error = wrap_to_pi(eul[:N] - eul_true[:N]) * 180 / np.pi
+    pos_err = np.linalg.norm(delta_x[:N, POS_IDX], axis=1)
+    meas_err = np.linalg.norm(x_true[99:N:100, POS_IDX] - z_GNSS[:GNSSk], axis=1)
 
-    fig5, axs5 = plt.subplots(7, 1, num=5, clear=True)
 
-    axs5[0].plot(t, (NEES_all[:N]).T)
-    axs5[0].plot(np.array([0, N - 1]) * dt, (CI15 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI15[0] <= NEES_all[:N]) * (NEES_all[:N] <= CI15[1]))
-    axs5[0].set(
-        title=f"Total NEES ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
-    )
-    axs5[0].set_ylim([0, 50])
+    # %% plotting
+    dosavefigures = True
+    doplothandout = True
 
-    axs5[1].plot(t, (NEES_pos[0:N]).T)
-    axs5[1].plot(np.array([0, N - 1]) * dt, (CI3 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI3[0] <= NEES_pos[:N]) * (NEES_pos[:N] <= CI3[1]))
-    axs5[1].set(
-        title=f"Position NEES ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
-    )
-    axs5[1].set_ylim([0, 20])
+    t = np.linspace(0, dt * (N - 1), N)
+    if doplothandout:
+        # 3d position plot
+        fig1, ax1 = plot.trajectoryPlot3D(x_est, x_true, z_GNSS, N, GNSSk)
+        fig1.tight_layout()
+        if dosavefigures: fig1.savefig(figdir+"ned.pdf")
 
-    axs5[2].plot(t, (NEES_vel[0:N]).T)
-    axs5[2].plot(np.array([0, N - 1]) * dt, (CI3 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI3[0] <= NEES_vel[:N]) * (NEES_vel[:N] <= CI3[1]))
-    axs5[2].set(
-        title=f"Velocity NEES ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
-    )
-    axs5[2].set_ylim([0, 20])
+        # state estimation plot
 
-    axs5[3].plot(t, (NEES_att[0:N]).T)
-    axs5[3].plot(np.array([0, N - 1]) * dt, (CI3 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI3[0] <= NEES_att[:N]) * (NEES_att[:N] <= CI3[1]))
-    axs5[3].set(
-        title=f"Attitude NEES ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
-    )
-    axs5[3].set_ylim([0, 20])
+        fig2all, fig2pos, fig2vel, fig2ang, fig2ab, fig2gb = \
+                plot.stateplot(t, x_est, eul, N, "States estimates")
+        # fig2vehicle = plot.kinematicplot(t, x_est, eul, N, "Kinematic estimates")
+        # fig2bias = plot.biasplot(t, x_est, eul, N, "Bias estimates")
+        if dosavefigures: 
+            fig2all.savefig(figdir+"state_estimates.pdf")
+            fig2pos.savefig(figdir+"estimate_pos.pdf")
+            fig2vel.savefig(figdir+"estimate_vel.pdf")
+            fig2ang.savefig(figdir+"estimate_eul.pdf")
+            fig2ab.savefig(figdir+"estimate_aclbias.pdf")
+            fig2gb.savefig(figdir+"estimate_gyrobias.pdf")
 
-    axs5[4].plot(t, (NEES_accbias[0:N]).T)
-    axs5[4].plot(np.array([0, N - 1]) * dt, (CI3 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI3[0] <= NEES_accbias[:N]) * (NEES_accbias[:N] <= CI3[1]))
-    axs5[4].set(
-        title=f"Accelerometer NEES ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
-    )
-    axs5[4].set_ylim([0, 20])
+        # state error plots
+        # fig3.tight_layout()
 
-    axs5[5].plot(t, (NEES_gyrobias[0:N]).T)
-    axs5[5].plot(np.array([0, N - 1]) * dt, (CI3 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI3[0] <= NEES_gyrobias[:N]) * (NEES_gyrobias[:N] <= CI3[1]))
-    axs5[5].set(
-        title=f"Gyro bias NEES ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
-    )
-    axs5[5].set_ylim([0, 20])
+        fig3all, fig3pos, fig3vel, fig3ang, fig3ab, fig3gb = \
+                plot.stateerrorplot(t, delta_x, eul_error, N, "State estimate errors")
+        if dosavefigures:
+            fig3all.savefig(figdir+"state_estimate_errors.pdf")
+            fig3pos.savefig(figdir+"estimate_error_pos.pdf")
+            fig3vel.savefig(figdir+"estimate_error_vel.pdf")
+            fig3ang.savefig(figdir+"estimate_errors_eul.pdf")
+            fig3ab.savefig(figdir+"estimate_errors_aclbias.pdf")
+            fig3gb.savefig(figdir+"estimate_errors_gyrobias.pdf")
 
-    axs5[6].plot(NIS[:GNSSk])
-    axs5[6].plot(np.array([0, N - 1]) * dt, (CI3 @ np.ones((1, 2))).T)
-    insideCI = np.mean((CI3[0] <= NIS[:GNSSk]) * (NIS[:GNSSk] <= CI3[1]))
-    axs5[6].set(
-        title=f"NIS ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
-    )
-    axs5[6].set_ylim([0, 20])
+        # Error distance plot
+        fig4, axs4 = plt.subplots(2, 1, num=4, clear=True, sharex=True)
 
-    #fig5.tight_layout()
-    if dosavefigures: fig5.savefig(figdir+"nees_nis.pdf")
+        est_error = np.sqrt(np.mean(np.sum(delta_x[:N, POS_IDX]**2, axis=1)))
+        meas_error = np.sqrt(np.mean(np.sum((x_true[99:N:100, POS_IDX] - z_GNSS[:GNSSk])**2, axis=1)))
+        axs4[0].plot(t, pos_err, label=f"Est error ({est_error:.3f})")
+        axs4[0].plot(np.arange(0, N, 100) * dt, meas_err, label=f"GNSS error ({meas_error:.3f})")
+        axs4[0].set(title=r"Position error $[m]$")
+        axs4[0].legend(loc='upper right')
 
-    # boxplot
-    fig6, axs6 = plt.subplots(1, 3)
+        vel_rmse = np.sqrt(np.mean(np.sum(delta_x[:N, VEL_IDX]**2, axis=1)))
+        axs4[1].plot(t, np.linalg.norm(delta_x[:N, VEL_IDX], axis=1), label=f"RMSE: {vel_rmse:.3f}")
+        axs4[1].set(title=r"Speed error $[m/s]$")
+        axs4[1].legend(loc='upper right')
+        fig4.tight_layout()
 
-    gauss_compare = np.sum(np.random.randn(3, GNSSk)**2, axis=0)
-    axs6[0].boxplot([NIS[0:GNSSk], gauss_compare], notch=True)
-    axs6[0].legend(['NIS', 'gauss'])
-    plt.grid()
+        #fig4.tight_layout()
+        if dosavefigures:
+            fig4.savefig(figdir+"estimate_vs_measurement_error.pdf")
 
-    gauss_compare_15 = np.sum(np.random.randn(15, N)**2, axis=0)
-    axs6[1].boxplot([NEES_all[0:N].T, gauss_compare_15], notch=True)
-    axs6[1].legend(['NEES', 'gauss (15 dim)'])
-    plt.grid()
 
-    gauss_compare_3  = np.sum(np.random.randn(3, N)**2, axis=0)
-    axs6[2].boxplot([NEES_pos[0:N].T, NEES_vel[0:N].T, NEES_att[0:N].T, NEES_accbias[0:N].T, NEES_gyrobias[0:N].T, gauss_compare_3], notch=True)
-    axs6[2].legend(['NEES pos', 'NEES vel', 'NEES att', 'NEES accbias', 'NEES gyrobias', 'gauss (3 dim)'])
-    plt.grid()
+        fig5, axs5 = plt.subplots(4, 1, num=5, clear=True, sharex=True)
+        fig5.subplots_adjust(hspace=0.3) # so ytick dont overlap
 
-    #fig6.tight_layout()
-    if dosavefigures: fig6.savefig(figdir+"boxplot.pdf")
+        insideCItot = np.mean((CI15[0] <= NEES_all[:N]) * (NEES_all[:N] <= CI15[1]))
+        axs5[0].plot(t, (NEES_all[:N]).T, label="total")
+        axs5[0].plot(np.array([0, N - 1]) * dt, (CI15 @ np.ones((1, 2))).T)
+        axs5[0].set_ylim([0, 50])
+        axs5[0].legend(loc="upper right")
 
-    def plot_NEES(delta_x, P, t, state_indices):
-        NEES = [eskf._NEES(P[k][state_indices**2], delta_x[k][state_indices]) for k in range(len(t))]
-        plt.figure()
-        plt.plot(t,NEES)
+        axs5[1].plot([t[0], t[~0]], (CI3 @ np.ones((1, 2))).T)
+        axs5[1].plot(t, (NEES_pos[0:N]).T, label="pos")
+        axs5[1].plot(t, (NEES_vel[0:N]).T, label="vel")
+        axs5[1].plot(t, (NEES_att[0:N]).T, label="att")
+        axs5[1].set_ylim([0, 20])
+        axs5[1].legend(loc="upper right")
 
-    def plot_NIS(NIS, CI, NIS_name):
-        plt.figure()
-        plt.plot(NIS[:GNSSk])
-        plt.plot(np.array([0, N - 1]) * dt, (CI @ np.ones((1, 2))).T)
-        insideCI = np.mean((CI[0] <= NIS[:GNSSk]) * (NIS[:GNSSk] <= CI[1]))
-        
-        plt.title(
-            f"{NIS_name} ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
+        axs5[2].plot([t[0], t[~0]], (CI3 @ np.ones((1, 2))).T)
+        axs5[2].plot(t, (NEES_accbias[0:N]).T,  label="accel bias")
+        axs5[2].plot(t, (NEES_gyrobias[0:N]).T, label="gyro bias")
+        axs5[2].set_ylim([0, 20])
+        axs5[2].legend(loc="upper right")
+
+        axs5[3].plot([t[0], t[~0]], (CI3 @ np.ones((1, 2))).T)
+        axs5[3].plot(NIS[:GNSSk], label="NIS")
+        axs5[3].set_ylim([0, 20])
+        axs5[3].legend(loc="upper right")
+
+        for ax in axs5:
+            ax.set_xlim([t[0], t[~0]])
+
+        insideCIpos = np.mean((CI3[0] <= NEES_pos[:N]) * (NEES_pos[:N] <= CI3[1]))
+        insideCIvel = np.mean((CI3[0] <= NEES_vel[:N]) * (NEES_vel[:N] <= CI3[1]))
+        insideCIatt = np.mean((CI3[0] <= NEES_att[:N]) * (NEES_att[:N] <= CI3[1]))
+        insideCIab = np.mean((CI3[0] <= NEES_accbias[:N]) * (NEES_accbias[:N] <= CI3[1]))
+        insideCIgb = np.mean((CI3[0] <= NEES_gyrobias[:N]) * (NEES_gyrobias[:N] <= CI3[1]))
+        insideCInis = np.mean((CI3[0] <= NIS[:GNSSk]) * (NIS[:GNSSk] <= CI3[1]))
+
+        #fig5.tight_layout()
+        if dosavefigures: 
+            fig5.savefig(figdir+"nees_nis.pdf")
+
+        # boxplot
+        fig6, axs6 = plt.subplots(1, 3, 
+                gridspec_kw={"width_ratios":[1,1,2]}
         )
+        plot.boxplot(axs6[0], [NIS[:GNSSk]], 3, ["NIS"])
+        plot.boxplot(axs6[1], [NEES_all[0:N].T], 15, ["NEES"])
+        plot.boxplot(axs6[2], 
+            [NEES_pos[0:N].T, NEES_vel[0:N].T, NEES_att[0:N].T, NEES_accbias[0:N].T, NEES_gyrobias[0:N].T],
+            3,
+            ['pos', 'vel', 'att', 'accbias', 'gyrobias', 'gauss'])
+        fig6.tight_layout()
 
-    plot_NIS(NIS_x, CI1, "NIS_x")
-    plot_NIS(NIS_y, CI1, "NIS_y")
-    plot_NIS(NIS_z, CI1, "NIS_z")
-    plot_NIS(NIS_xy, CI2, "NIS_xy")
+        #fig6.tight_layout()
+        if dosavefigures: 
+            fig6.savefig(figdir+"boxplot.pdf")
 
-else:
-    import matplotlib.colors as mcolors
-    colors = [c for c in mcolors.TABLEAU_COLORS][:2]
 
-    fig1, ax = plt.subplots(2,1)
-    ax[0].plot(t, delta_x[:N, ERR_ACC_BIAS_IDX])
-    ax[0].set(ylabel="Accl bias error [m/s^2]")
-    ax[0].legend([
-            f"$x$ ({np.sqrt(np.mean(delta_x[:N, ERR_ACC_BIAS_IDX[0]]**2))})",
-            f"$y$ ({np.sqrt(np.mean(delta_x[:N, ERR_ACC_BIAS_IDX[1]]**2))})",
-            f"$z$ ({np.sqrt(np.mean(delta_x[:N, ERR_ACC_BIAS_IDX[2]]**2))})"
-        ]
-    )
-    ax[1].plot(t, delta_x[:N, ERR_GYRO_BIAS_IDX])
-    ax[1].set(ylabel="Gyro bias error [m/s^2]")
-    ax[1].legend([
-            f"$x$ ({np.sqrt(np.mean(delta_x[:N, ERR_GYRO_BIAS_IDX[0]]**2))})",
-            f"$y$ ({np.sqrt(np.mean(delta_x[:N, ERR_GYRO_BIAS_IDX[1]]**2))})",
-            f"$z$ ({np.sqrt(np.mean(delta_x[:N, ERR_GYRO_BIAS_IDX[2]]**2))})"
-        ]
-    )
+        plot.plot_NIS(NIS_x, CI1, "NIS_x", confprob, dt, N, GNSSk)
+        plot.plot_NIS(NIS_y, CI1, "NIS_y", confprob, dt, N, GNSSk)
+        plot.plot_NIS(NIS_z, CI1, "NIS_z", confprob, dt, N, GNSSk)
+        plot.plot_NIS(NIS_xy, CI2, "NIS_xy", confprob, dt, N, GNSSk)
 
-    fig2, ax = plt.subplots(2,1)
-    for i in range(len(colors)):
-        ax[0].plot(t, x_true[:N, ACC_BIAS_IDX[i]], ":", c=colors[i])
-        ax[0].plot(t, x_est[:N, ACC_BIAS_IDX[i]], c=colors[i])
-    ax[0].set(ylabel="Accl bias [m/s^2]")
+    if doshowplot:
+        plt.show()
 
-    for i in range(len(colors)):
-        ax[1].plot(t, x_true[:N, GYRO_BIAS_IDX[i]], ":", c=colors[i])
-        ax[1].plot(t, x_est[:N,  GYRO_BIAS_IDX[i]], c=colors[i])
-    ax[1].set(ylabel="Gyro bias [m/s^2]")
 
-plt.show()
+parameters = dict(
+    # IMU noise values for STIM300, based on datasheet and simulation sample rate
+    # Continous noise
+    cont_gyro_noise_std = 4.36e-5,  # (rad/s)/sqrt(Hz)
+    cont_acc_noise_std = 1.167e-3,  # (m/s**2)/sqrt(Hz)
+    # Discrete sample noise at simulation rate used
+    rate_std_factor = 0.5, 
+    acc_std_factor = 0.5,
+    # Bias values
+    rate_bias_driving_noise_std = 5e-5,
+    cont_rate_bias_factor = 1,
+    acc_bias_driving_noise_std = 4e-3,
+    cont_acc_bias_factor = 6,
+    p_acc = 1e-16,
+    p_gyro = 1e-16,
+    # Position and velocity measurement
+    # Measurement noise
+    p_std = np.array([0.3, 0.3, 0.5]),
+    # Initial covariances
+    sigma_pos = 5,
+    sigma_vel = 5,
+    sigma_err_acc_bias = 0.01,
+    sigma_err_gyro_bias = 0.001,
+    # Simulation parameters
+    N = 20000,
+    doGNSS = True,
+    debug = False,
+    dosavefigures = True,
+    doshowplot = False,
+    figdir="figs/simulated/",
+    dopickle = False,
+)
+
+run_experiment(parameters)
+
+

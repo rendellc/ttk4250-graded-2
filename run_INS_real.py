@@ -5,6 +5,7 @@ import scipy.stats
 
 import matplotlib
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 
 try: # see if tqdm is available, otherwise define it as a dummy
@@ -175,8 +176,8 @@ P_pred[0][ERR_GYRO_BIAS_IDX**2] = (1e-3)**2 * np.eye(3)
 
 # %% Run estimation
 
-start = 52000
-N = 10000 #steps
+start = 0
+N = steps
 
 startGNSS = int(start*dt)
 
@@ -193,7 +194,7 @@ GNSSk = 0
 for k in tqdm(range(N)):
     if timeIMU[k] >= timeGNSS[GNSSk]:
         R_GNSS = accuracy_GNSS[GNSSk]**2 * np.diag([1,1,1]) # Current GNSS covariance
-        NIS[GNSSk] = eskf.NIS_GNSS_position(x_pred[k], P_pred[k], z_GNSS[GNSSk], R_GNSS, lever_arm)# TODO
+        NIS[GNSSk], *_ = eskf.NIS_GNSS_position(x_pred[k], P_pred[k], z_GNSS[GNSSk], R_GNSS, lever_arm)# TODO
 
         x_est[k], P_est[k] = eskf.update_GNSS_position(x_pred[k], P_pred[k], z_GNSS[GNSSk], R_GNSS, lever_arm)
         if eskf.debug:
@@ -275,7 +276,8 @@ fig4 = plt.figure()
 
 gauss_compare = np.sum(np.random.randn(3, GNSSk)**2, axis=0)
 plt.boxplot([NIS[0:GNSSk], gauss_compare], notch=True)
-plt.legend('NIS', 'gauss')
+plt.legend(['NIS', 'gauss'])
 plt.grid()
 
 # %%
+plt.show()
