@@ -679,7 +679,9 @@ class ESKF:
 
         quaternion_conj = np.diag([1,-1,-1,-1]) @ x_nominal[ATT_IDX]
 
-        delta_quaternion = quaternion_product(quaternion_conj, x_true[ATT_IDX])
+        delta_quaternion = quaternion_product(quaternion_conj, x_true[ATT_IDX])        
+        if delta_quaternion[0] < 0:
+            delta_quaternion = -delta_quaternion
         delta_theta = 2 * delta_quaternion[1:]
 
         # Concatenation of bias indices

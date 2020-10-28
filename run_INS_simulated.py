@@ -182,7 +182,7 @@ x_pred[0, 6] = 1  # no initial rotation: nose to North, right to East, and belly
 P_pred[0][POS_IDX ** 2] = 5**2 * np.eye(3)
 P_pred[0][VEL_IDX ** 2] = 5**2 * np.eye(3)
 P_pred[0][ERR_ATT_IDX ** 2] = np.diag([np.pi/30, np.pi/30, np.pi/3])**2 
-P_pred[0][ERR_ACC_BIAS_IDX ** 2] = 0.056**2 * np.eye(3)
+P_pred[0][ERR_ACC_BIAS_IDX ** 2] = 0.01**2 * np.eye(3)
 P_pred[0][ERR_GYRO_BIAS_IDX ** 2] = 0.001**2 * np.eye(3)
 
 # %% Run estimation
@@ -213,8 +213,8 @@ for k in tqdm.trange(N):
         x_est[k] = x_pred[k]
         P_est[k] = P_pred[k]
         
-    if x_est[k, 6] < 0:
-       x_est[k, ATT_IDX] = -x_est[k, ATT_IDX]
+    # if x_est[k, 6] < 0:
+    #    x_est[k, ATT_IDX] = -x_est[k, ATT_IDX]
 
     delta_x[k] = eskf.delta_x(x_est[k], x_true[k])
     (
