@@ -24,6 +24,10 @@ ATT_IDX = CatSlice(start=6, stop=10)
 ACC_BIAS_IDX = CatSlice(start=10, stop=13)
 GYRO_BIAS_IDX = CatSlice(start=13, stop=16)
 
+X_IDX = CatSlice(start=0, stop=1)
+Y_IDX = CatSlice(start=1, stop=2)
+Z_IDX = CatSlice(start=2,stop=3)
+
 ERR_ATT_IDX = CatSlice(start=6, stop=9)
 ERR_ACC_BIAS_IDX = CatSlice(start=9, stop=12)
 ERR_GYRO_BIAS_IDX = CatSlice(start=12, stop=15)
@@ -639,10 +643,14 @@ class ESKF:
         )
 
         NIS = v.T @ la.solve(S, v)
+        NIS_x = v[X_IDX].T @ la.solve(S[X_IDX**2], v[X_IDX])
+        NIS_y = v[Y_IDX].T @ la.solve(S[Y_IDX**2], v[Y_IDX])
+        NIS_z = v[Z_IDX].T @ la.solve(S[Z_IDX**2], v[Z_IDX])
+        NIS_xy = v[X_IDX + Y_IDX].T @ la.solve(S[(X_IDX + Y_IDX)**2], v[X_IDX + Y_IDX])
 
         assert NIS >= 0, "EKSF.NIS_GNSS_positionNIS: NIS not positive"
 
-        return NIS
+        return NIS, NIS_x, NIS_y, NIS_z, NIS_xy
 
     @classmethod
     def delta_x(cls, x_nominal: np.ndarray, x_true: np.ndarray,) -> np.ndarray:
@@ -716,7 +724,7 @@ class ESKF:
         NEES_pos = cls._NEES(P[POS_IDX**2], d_x[POS_IDX])
         NEES_vel = cls._NEES(P[VEL_IDX**2], d_x[VEL_IDX])
         NEES_att = cls._NEES(P[ERR_ATT_IDX**2], d_x[ERR_ATT_IDX])
-        NEES_accbias = cls._NEES(P[ERR_ACC_BIAS_IDX**2], d_x[ERR_ACC_BIAS_IDX])
+        NEES_accbias = cls._NEES(P[ERR_ATT_IDX**2], d_x[ERR_ATT_IDX])
         NEES_gyrobias = cls._NEES(P[ERR_GYRO_BIAS_IDX**2], d_x[ERR_GYRO_BIAS_IDX])
 
         NEESes = np.array(

@@ -125,7 +125,7 @@ acc_std = 0.5 * cont_acc_noise_std * np.sqrt(1 / dt)
 # Bias values
 rate_bias_driving_noise_std = 5e-5
 cont_rate_bias_driving_noise_std = (
-    (1/3) * rate_bias_driving_noise_std / np.sqrt(1 / dt)
+    (1) * rate_bias_driving_noise_std / np.sqrt(1 / dt)
 )
 
 acc_bias_driving_noise_std = 4e-3
@@ -135,8 +135,8 @@ cont_acc_bias_driving_noise_std = 6 * acc_bias_driving_noise_std / np.sqrt(1 / d
 p_std = np.array([0.3, 0.3, 0.5])  # Measurement noise
 R_GNSS = np.diag(p_std ** 2)
 
-p_acc = 1e-8
-p_gyro = 1e-8
+p_acc = 1e-16
+p_gyro = 1e-16
 
 # %% Estimator
 eskf = ESKF(
@@ -161,6 +161,10 @@ P_pred = np.zeros((steps, 15, 15))
 delta_x = np.zeros((steps, 15))
 
 NIS = np.zeros(gnss_steps)
+NIS_x = np.zeros(gnss_steps)
+NIS_y = np.zeros(gnss_steps)
+NIS_z = np.zeros(gnss_steps)
+NIS_xy = np.zeros(gnss_steps)
 
 NEES_all = np.zeros(steps)
 NEES_pos = np.zeros(steps)
@@ -179,7 +183,7 @@ P_pred[0][POS_IDX ** 2] = 5**2 * np.eye(3)
 P_pred[0][VEL_IDX ** 2] = 5**2 * np.eye(3)
 P_pred[0][ERR_ATT_IDX ** 2] = np.diag([np.pi/30, np.pi/30, np.pi/3])**2 
 P_pred[0][ERR_ACC_BIAS_IDX ** 2] = 0.056**2 * np.eye(3)
-P_pred[0][ERR_GYRO_BIAS_IDX ** 2] = 0.05**2 * np.eye(3)
+P_pred[0][ERR_GYRO_BIAS_IDX ** 2] = 0.001**2 * np.eye(3)
 
 # %% Run estimation
 # run this file with 'python -O run_INS_simulated.py' to turn of assertions and get about 8/5 speed increase for longer runs
@@ -192,7 +196,13 @@ GNSSk: int = 0  # keep track of current step in GNSS measurements
 for k in tqdm.trange(N):
 
     if doGNSS and timeIMU[k] >= timeGNSS[GNSSk]:
-        NIS[GNSSk] = eskf.NIS_GNSS_position(x_pred[k], P_pred[k], z_GNSS[GNSSk], R_GNSS, lever_arm)
+        (
+            NIS[GNSSk], 
+            NIS_x[GNSSk],
+            NIS_y[GNSSk],
+            NIS_z[GNSSk],
+            NIS_xy[GNSSk],
+        )  = eskf.NIS_GNSS_position(x_pred[k], P_pred[k], z_GNSS[GNSSk], R_GNSS, lever_arm)
 
         x_est[k], P_est[k] = eskf.update_GNSS_position(x_pred[k], P_pred[k], z_GNSS[GNSSk], R_GNSS, lever_arm)
         assert np.all(np.isfinite(P_est[k])), f"Not finite P_pred at index {k}"
@@ -204,7 +214,7 @@ for k in tqdm.trange(N):
         P_est[k] = P_pred[k]
         
     if x_est[k, 6] < 0:
-        x_est[k, ATT_IDX] = -x_est[k, ATT_IDX]
+       x_est[k, ATT_IDX] = -x_est[k, ATT_IDX]
 
     delta_x[k] = eskf.delta_x(x_est[k], x_true[k])
     (
@@ -395,6 +405,8 @@ if doplothandout:
     confprob = 0.95
     CI15 = np.array(scipy.stats.chi2.interval(confprob, 15)).reshape((2, 1))
     CI3 = np.array(scipy.stats.chi2.interval(confprob, 3)).reshape((2, 1))
+    CI1 = np.array(scipy.stats.chi2.interval(confprob, 1)).reshape((2, 1))
+    CI2 = np.array(scipy.stats.chi2.interval(confprob, 2)).reshape((2, 1))
     CI3N = np.array(scipy.stats.chi2.interval(confprob, 3 * N)) / N
     CI15N = np.array(scipy.stats.chi2.interval(confprob, 15 * N)) / N
 
@@ -506,6 +518,21 @@ if doplothandout:
         NEES = [eskf._NEES(P[k][state_indices**2], delta_x[k][state_indices]) for k in range(len(t))]
         plt.figure()
         plt.plot(t,NEES)
+
+    def plot_NIS(NIS, CI, NIS_name):
+        plt.figure()
+        plt.plot(NIS[:GNSSk])
+        plt.plot(np.array([0, N - 1]) * dt, (CI @ np.ones((1, 2))).T)
+        insideCI = np.mean((CI[0] <= NIS[:GNSSk]) * (NIS[:GNSSk] <= CI[1]))
+        
+        plt.title(
+            f"{NIS_name} ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)"
+        )
+
+    plot_NIS(NIS_x, CI1, "NIS_x")
+    plot_NIS(NIS_y, CI1, "NIS_y")
+    plot_NIS(NIS_z, CI1, "NIS_z")
+    plot_NIS(NIS_xy, CI2, "NIS_xy")
 
 else:
     import matplotlib.colors as mcolors
