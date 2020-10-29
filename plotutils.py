@@ -15,6 +15,7 @@ from eskf import (
 )
 
 BIGPLOTSIZE = (3.5, 6)
+GYRO_BIAS_YLIM = (-250, 250)
 
 def trajectoryPlot3D(x_est, x_true, z_GNSS, N, GNSSk):
     # 3d position plot
@@ -22,7 +23,8 @@ def trajectoryPlot3D(x_est, x_true, z_GNSS, N, GNSSk):
     ax = fig.add_subplot(1,1,1, projection='3d')
 
     ax.plot3D(x_est[:N, 1], x_est[:N, 0], -x_est[:N, 2])
-    ax.plot3D(x_true[:N, 1], x_true[:N, 0], -x_true[:N, 2])
+    if len(x_true) > 0:
+        ax.plot3D(x_true[:N, 1], x_true[:N, 0], -x_true[:N, 2])
 
     ax.plot3D(z_GNSS[:GNSSk, 1], z_GNSS[:GNSSk, 0], -z_GNSS[:GNSSk, 2])
     ax.set_xlabel("East [m]")
@@ -88,6 +90,8 @@ def stateplot(t, x_nom, eul, N, title):
     _multiplot([axs[4], axgb], t, np.rad2deg(x_nom[:N, GYRO_BIAS_IDX]) * 3600, "Gyro bias [deg/h]",
             ["$x$", "$y$", "$z$"], 'upper right'
     )
+    axs[4].set_ylim(GYRO_BIAS_YLIM)
+    axgb.set_ylim(GYRO_BIAS_YLIM)
 
     #figall.suptitle(title)
     figall.set_size_inches(BIGPLOTSIZE)
@@ -214,9 +218,9 @@ def stateerrorplot(t, delta_x, eul_error, N, title):
     )
 
     _multiplot([axs[2],axang], t, eul_error, "Attitude [deg]", [
-            rf"$\phi$ ({np.sqrt(np.mean((eul_error[:N, 0])**2)):.3f})",
-            rf"$\theta$ ({np.sqrt(np.mean((eul_error[:N, 1])**2)):.3f})",
-            rf"$\psi$ ({np.sqrt(np.mean((eul_error[:N, 2])**2)):.3f})",
+            rf"$\phi$ ({np.sqrt(np.mean((eul_error[:N, 0])**2)):e})",
+            rf"$\theta$ ({np.sqrt(np.mean((eul_error[:N, 1])**2)):e})",
+            rf"$\psi$ ({np.sqrt(np.mean((eul_error[:N, 2])**2)):e})",
         ], 'upper right'
     )
 
@@ -228,9 +232,9 @@ def stateerrorplot(t, delta_x, eul_error, N, title):
     )
 
     _multiplot([axs[4],axgb], t, np.rad2deg(delta_x[:N, ERR_GYRO_BIAS_IDX]), "Gyro bias [deg/s]", [
-            f"$x$ ({np.rad2deg(delta_x_RMSE[ERR_GYRO_BIAS_IDX[0]]):.3f})",
-            f"$y$ ({np.rad2deg(delta_x_RMSE[ERR_GYRO_BIAS_IDX[1]]):.3f})",
-            f"$z$ ({np.rad2deg(delta_x_RMSE[ERR_GYRO_BIAS_IDX[2]]):.3f})",
+            f"$x$ ({np.rad2deg(delta_x_RMSE[ERR_GYRO_BIAS_IDX[0]]):e})",
+            f"$y$ ({np.rad2deg(delta_x_RMSE[ERR_GYRO_BIAS_IDX[1]]):e})",
+            f"$z$ ({np.rad2deg(delta_x_RMSE[ERR_GYRO_BIAS_IDX[2]]):e})",
         ], 'upper right'
     )
 
@@ -264,6 +268,9 @@ def plot_NIS(NIS, CI, NIS_name, confprob, dt, N, GNSSk, ax=None):
     ax.plot(np.array([0, N - 1]) * dt, (CI @ np.ones((1, 2))).T)
     insideCI = np.mean((CI[0] <= NIS[:GNSSk]) * (NIS[:GNSSk] <= CI[1]))
     
-    ax.set_title(f"{NIS_name} ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)")
+    upperY = CI[1]//1 * 2
+    ax.set_title(f"{NIS_name} ({100 *  insideCI:.1f} % inside {100 * confprob} CI)")
+    ax.set_ylim(0,upperY)
+
 
 

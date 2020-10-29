@@ -359,6 +359,15 @@ def run_experiment(parameters):
         insideCIgb = np.mean((CI3[0] <= NEES_gyrobias[:N]) * (NEES_gyrobias[:N] <= CI3[1]))
         insideCInis = np.mean((CI3[0] <= NIS[:GNSSk]) * (NIS[:GNSSk] <= CI3[1]))
 
+        print("Inside CI total", insideCItot)
+        print("Inside CI pos", insideCIpos)
+        print("Inside CI vel", insideCIvel)
+        print("Inside CI att", insideCIatt)
+        print("Inside CI ab", insideCIab)
+        print("Inside CI gb", insideCIgb)
+        print("Inside CI NIS", insideCInis)
+
+
         #fig5.tight_layout()
         if dosavefigures: 
             fig5.savefig(figdir+"nees_nis.pdf")
@@ -372,7 +381,7 @@ def run_experiment(parameters):
         plot.boxplot(axs6[2], 
             [NEES_pos[0:N].T, NEES_vel[0:N].T, NEES_att[0:N].T, NEES_accbias[0:N].T, NEES_gyrobias[0:N].T],
             3,
-            ['pos', 'vel', 'att', 'accbias', 'gyrobias', 'gauss'])
+            ['pos', 'vel', 'att', 'accbias', 'gyrobias'])
         fig6.tight_layout()
 
         #fig6.tight_layout()
@@ -388,15 +397,12 @@ def run_experiment(parameters):
     if doshowplot:
         plt.show()
 
-
 parameters = dict(
-    # IMU noise values for STIM300, based on datasheet and simulation sample rate
-    # Continous noise
     cont_gyro_noise_std = 4.36e-5,  # (rad/s)/sqrt(Hz)
     cont_acc_noise_std = 1.167e-3,  # (m/s**2)/sqrt(Hz)
     # Discrete sample noise at simulation rate used
-    rate_std_factor = 0.5, 
-    acc_std_factor = 0.5,
+    rate_std_factor = 0.3, 
+    acc_std_factor = 0.3,
     # Bias values
     rate_bias_driving_noise_std = 5e-5,
     cont_rate_bias_factor = 1,
@@ -408,20 +414,28 @@ parameters = dict(
     # Measurement noise
     p_std = np.array([0.3, 0.3, 0.5]),
     # Initial covariances
-    sigma_pos = 5,
-    sigma_vel = 5,
-    sigma_err_acc_bias = 0.01,
-    sigma_err_gyro_bias = 0.001,
+    sigma_pos = 7.5,
+    sigma_vel = 7.5,
+    sigma_err_acc_bias = 0.05,
+    sigma_err_gyro_bias = 0.005,
     # Simulation parameters
-    N = 20000,
+    dt = dt,
+    N = steps,
     doGNSS = True,
     debug = False,
     dosavefigures = True,
-    doshowplot = False,
-    figdir="figs/simulated/",
+    doshowplot = True,
+    figdir="figs/simulated_all/",
     dopickle = False,
 )
 
-run_experiment(parameters)
+if __name__ == "__main__":
+    run_experiment(parameters)
+
+    import latexutils
+    parameter_texvalues = latexutils.parameter_to_texvalues(sim_parameters)
+    latexutils.save_params_to_csv(parameter_texvalues, "csvs/simulated_params_test.csv")
+
+
 
 
