@@ -98,7 +98,7 @@ except Exception as e:
 filename_to_load = "task_real.mat"
 loaded_data = scipy.io.loadmat(filename_to_load)
 
-do_corrections = True # TODO: set to false for the last task
+do_corrections = False
 if do_corrections:
     S_a = loaded_data['S_a']
     S_g = loaded_data['S_g']
@@ -190,7 +190,7 @@ P_pred[0][ERR_GYRO_BIAS_IDX**2] = (0.005)**2 * np.eye(3)
 # %% Run estimation
 
 start = 0
-N = 10000
+N = steps
 
 startGNSS = int(start*dt)
 
