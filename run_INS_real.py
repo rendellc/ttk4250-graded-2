@@ -312,14 +312,14 @@ for k in remove_keys:
 latexutils.save_params_to_csv(parameter_texvalues, "csvs/real_params.csv")
 
 # pickle figures so we can review them later
-savedir = "results/real_pickle/"
-
-def pickle_fig(fig, filename):
-    with open(savedir + filename, 'wb') as f:
-        pickle.dump(fig, f)
-
-pickle_fig(fig1, "ned.pickle")
-pickle_fig(fig2all, "state_estimate.pickle")
-pickle_fig(fig3, "nis.pickle")
-pickle_fig(fig4, "boxplot.pickle")
-
+# savedir = "results/real_pickle/"
+# 
+# def pickle_fig(fig, filename):
+#     with open(savedir + filename, 'wb') as f:
+#         pickle.dump(fig, f)
+# 
+# pickle_fig(fig1, "ned.pickle")
+# pickle_fig(fig2all, "state_estimate.pickle")
+# pickle_fig(fig3, "nis.pickle")
+# pickle_fig(fig4, "boxplot.pickle")
+# 
