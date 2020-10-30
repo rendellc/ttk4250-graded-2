@@ -129,6 +129,8 @@ def run_experiment(parameters):
     p_std = parameters["p_std"]
     sigma_pos = parameters["sigma_pos"]
     sigma_vel = parameters["sigma_vel"]
+    sigma_rollpitch = parameters["sigma_rollpitch"]
+    sigma_yaw = parameters["sigma_yaw"]
     sigma_err_acc_bias = parameters["sigma_err_acc_bias"]
     sigma_err_gyro_bias = parameters["sigma_err_gyro_bias"]
     N = parameters["N"]
@@ -188,7 +190,7 @@ def run_experiment(parameters):
     # These have to be set reasonably to get good results
     P_pred[0][POS_IDX ** 2] = sigma_pos**2 * np.eye(3)
     P_pred[0][VEL_IDX ** 2] = sigma_vel**2 * np.eye(3)
-    P_pred[0][ERR_ATT_IDX ** 2] = np.diag([np.pi/30, np.pi/30, np.pi/3])**2 
+    P_pred[0][ERR_ATT_IDX ** 2] = np.diag([sigma_rollpitch, sigma_rollpitch, sigma_yaw])**2 
     P_pred[0][ERR_ACC_BIAS_IDX ** 2] = sigma_err_acc_bias**2 * np.eye(3)
     P_pred[0][ERR_GYRO_BIAS_IDX ** 2] = sigma_err_gyro_bias**2 * np.eye(3)
 
@@ -412,8 +414,8 @@ def run_experiment(parameters):
                 dict(avg=ANEES_pos,inside=insideCIpos, text="NEES pos",CI=CI3N),
                 dict(avg=ANEES_vel,inside=insideCIvel, text="NEES vel",CI=CI3N),
                 dict(avg=ANEES_att,inside=insideCIatt, text="NEES att",CI=CI3N),
-                dict(avg=ANEES_accbias,inside=insideCIgb, text="NEES gyro bias",CI=CI3N),
-                dict(avg=ANEES_gyrobias,inside=insideCIab, text="NEES acc bias",CI=CI3N),
+                dict(avg=ANEES_gyrobias,inside=insideCIgb, text="NEES gyro bias",CI=CI3N),
+                dict(avg=ANEES_accbias,inside=insideCIab, text="NEES acc bias",CI=CI3N),
                 dict(avg=ANIS,inside=insideCInis, text="NIS",CI=CI3N),
         ]
 
@@ -443,11 +445,13 @@ parameters = dict(
     # Initial covariances
     sigma_pos = 7.5,
     sigma_vel = 7.5,
+    sigma_rollpitch = np.pi/30,
+    sigma_yaw = np.pi/3,
     sigma_err_acc_bias = 0.05,
     sigma_err_gyro_bias = 0.005,
     # Simulation parameters
     dt = dt,
-    N = steps,
+    N = 1000,
     doGNSS = True,
     debug = False,
     dosavefigures = True,

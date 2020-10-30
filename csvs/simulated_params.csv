@@ -4,6 +4,8 @@
 ;\sigma_{v0};7.5
 ;\sigma_{ab0};0.05
 ;\sigma_{gb0};0.005
+;\sigma_{\phi\theta0};\pi/30.0
+;\sigma_{\psi0};\pi/3.0
 ;\sigma_\text{gyro};0.0001308
 ;\sigma_\text{acc};0.0035010
 ;\sigma_\text{gyro,bias};0.0001308

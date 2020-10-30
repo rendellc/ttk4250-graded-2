@@ -1,4 +1,5 @@
 import csv
+from numpy import pi
 
 PARAMETER_TO_TEXNAME = dict(
     # cont_gyro_noise_std = r"\sigma_{gyro}",
@@ -9,6 +10,8 @@ PARAMETER_TO_TEXNAME = dict(
     p_acc = r"p_\text{acc}",
     sigma_pos = r"\sigma_{p0}",
     sigma_vel = r"\sigma_{v0}",
+    # sigma_rollpitch = r"\sigma_{\phi\theta0}",
+    # sigma_yaw = r"\sigma_{\psi0}",
     sigma_err_acc_bias = r"\sigma_{ab0}",
     sigma_err_gyro_bias = r"\sigma_{gb0}",
 )
@@ -48,6 +51,10 @@ def parameter_to_texvalues(params):
     pg_v_str = "" if abs(pg_v-1) < 0.0001 else str(pg_v)
     parameter_tex_dict[pt["p_acc"]] = pa_v_str +" 10^{" + str(pa_exp) + "}"
     parameter_tex_dict[pt["p_gyro"]] = pg_v_str +" 10^{" + str(pg_exp) + "}"
+
+    parameter_tex_dict[r"\sigma_{\phi\theta0}"] = rf"\pi/{pi/p['sigma_rollpitch']}"
+    parameter_tex_dict[r"\sigma_{\psi0}"] = rf"\pi/{pi/p['sigma_yaw']}"
+
 
     parameter_tex_dict[r"\sigma_\text{gyro}"] = f"{p['rate_std_factor']*p['cont_gyro_noise_std']* 1/sqdt:.7f}"
     parameter_tex_dict[r"\sigma_\text{acc}"] = f"{p['acc_std_factor']*p['cont_acc_noise_std']* 1/sqdt:.7f}"

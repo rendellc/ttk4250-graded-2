@@ -126,18 +126,18 @@ cont_gyro_noise_std = 4.36e-5 # TODO
 cont_acc_noise_std = 1.167e-3 # TODO
 
 # Discrete sample noise at simulation rate used
-rate_std_factor = 0.5
+rate_std_factor = 0.3
 rate_std = rate_std_factor * cont_gyro_noise_std*np.sqrt(1/dt)
-acc_std_factor = 0.5
+acc_std_factor = 0.3
 acc_std  = acc_std_factor * cont_acc_noise_std*np.sqrt(1/dt)
 
 # Bias values
 rate_bias_driving_noise_std = 5e-5# TODO
-cont_rate_bias_factor = 0.5
+cont_rate_bias_factor = 0.3
 cont_rate_bias_driving_noise_std = cont_rate_bias_factor * rate_bias_driving_noise_std/np.sqrt(1/dt)
 
 acc_bias_driving_noise_std = 4e-3# TODO
-cont_acc_bias_factor = 3
+cont_acc_bias_factor = 1
 cont_acc_bias_driving_noise_std = cont_acc_bias_factor * acc_bias_driving_noise_std/np.sqrt(1/dt)
 
 # Position and velocity measurement
@@ -206,7 +206,7 @@ GNSSk = 0
 
 for k in tqdm(range(N-start)):
     if timeIMU[k] >= timeGNSS[GNSSk]:
-        R_GNSS = (0.2*accuracy_GNSS[GNSSk])**2 * np.diag([0.5,0.5,3]) # Current GNSS covariance
+        R_GNSS = (0.5*accuracy_GNSS[GNSSk])**2 * np.diag([1,1,1]) # Current GNSS covariance
 
         (
             NIS[GNSSk], 
@@ -266,7 +266,7 @@ plot.plot_NIS(NIS, CI3, "NIS", confprob, dt, N, GNSSk, ax=ax3)
 fig3p, ax3p = plt.subplots(1,1)
 
 t_gnssk = np.linspace(t[0], t[~0], GNSSk)
-plot.pretty_NEESNIS(ax3p, t_gnssk, NIS[:GNSSk], "NIS", CI3, fillCI=True, upperY=30)
+plot.pretty_NEESNIS(ax3p, t_gnssk, NIS[:GNSSk], "NIS", CI3, fillCI=True, upperY=50)
 #ax3p.legend(loc="best",ncol=1)
 #plt.plot(NIS[:GNSSk])
 #plt.plot(np.array([0, N-1]) * dt, (CI3@np.ones((1, 2))).T)
@@ -293,9 +293,9 @@ fig5p, ax5p = plt.subplots(2,1, sharex=True)
 plot.pretty_NEESNIS(ax5p[0], t_gnssk, NIS_x[:GNSSk], "NIS x", CI1, fillCI=True, upperY=20)
 plot.pretty_NEESNIS(ax5p[0], t_gnssk, NIS_y[:GNSSk], "NIS y", CI1, fillCI=False, upperY=20)
 plot.pretty_NEESNIS(ax5p[0], t_gnssk, NIS_z[:GNSSk], "NIS z", CI1, fillCI=False, upperY=20)
-ax5p[0].legend(loc="best",ncol=3)
-plot.pretty_NEESNIS(ax5p[1], t_gnssk, NIS_xy[:GNSSk], "NIS xy", CI2, fillCI=True, upperY=20)
-#ax5p[1].legend(loc="best",ncol=1)
+ax5p[0].legend(loc="upper right",ncol=3)
+plot.pretty_NEESNIS(ax5p[1], t_gnssk, NIS_xy[:GNSSk], "NIS xy", CI2, fillCI=True, upperY=30)
+ax5p[1].legend(loc="upper right",ncol=1)
 
 
 fig5p.savefig(figdir + "nises.pdf")
@@ -328,13 +328,17 @@ for k,texvalue in parameter_texvalues.items():
 for k in remove_keys:
     del parameter_texvalues[k]
 
-latexutils.save_params_to_csv(parameter_texvalues, "csvs/real_params.csv")
+latexutils.save_params_to_csv(parameter_texvalues, "csvs/test/real_params.csv")
 
+M = 1000
+ANIS_after1000 = NIS[M:GNSSk].mean()
+insideCI_after1000 = np.mean((CI3[0] <= NIS[M:GNSSk]) * (NIS[M:GNSSk] <= CI3[1]))
 consistencydatas = [
         dict(avg=ANIS,inside=insideCI, text="NIS",CI=CI3N),
+        dict(avg=ANIS_after1000,inside=insideCI_after1000, text="NIS after 1000s",CI=CI3N),
 ]
 
-latexutils.save_consistency_results(consistencydatas, "csvs/real_consistency.csv")
+latexutils.save_consistency_results(consistencydatas, "csvs/test/real_consistency.csv")
 
 ANIS_x = NIS_x[:GNSSk].mean()
 ANIS_y = NIS_y[:GNSSk].mean()
@@ -354,7 +358,7 @@ consistencydatas = [
         dict(avg=ANIS_xy,inside=insideCIxy, text="NIS xy",CI=CI2N),
 ]
 
-latexutils.save_consistency_results(consistencydatas, "csvs/real_consistency_all.csv")
+latexutils.save_consistency_results(consistencydatas, "csvs/test/real_consistency_all.csv")
 
 # pickle figures so we can review them later
 # savedir = "results/real_pickle/"
