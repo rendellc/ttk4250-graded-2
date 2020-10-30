@@ -6,8 +6,8 @@
 ;\sigma_{gb0};0.005
 ;\sigma_{\phi\theta0};\pi/30.0
 ;\sigma_{\psi0};\pi/3.0
-;\sigma_\text{gyro};0.0001308
-;\sigma_\text{acc};0.0035010
-;\sigma_\text{gyro,bias};0.0001308
-;\sigma_\text{acc,bias};0.0001308
+;\sigma_\text{gyro};0.0001744
+;\sigma_\text{acc};0.0116700
+;\sigma_\text{gyro,bias};0.0001744
+;\sigma_\text{acc,bias};0.0004360
 ;\mathbf{R}_\text{GNSS};\text{diag}([0.3^2, 0.3^2, 0.5^2])

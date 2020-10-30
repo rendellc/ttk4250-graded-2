@@ -726,7 +726,7 @@ class ESKF:
         NEES_pos = cls._NEES(P[POS_IDX**2], d_x[POS_IDX])
         NEES_vel = cls._NEES(P[VEL_IDX**2], d_x[VEL_IDX])
         NEES_att = cls._NEES(P[ERR_ATT_IDX**2], d_x[ERR_ATT_IDX])
-        NEES_accbias = cls._NEES(P[ERR_ATT_IDX**2], d_x[ERR_ATT_IDX])
+        NEES_accbias = cls._NEES(P[ERR_ACC_BIAS_IDX**2], d_x[ERR_ACC_BIAS_IDX])
         NEES_gyrobias = cls._NEES(P[ERR_GYRO_BIAS_IDX**2], d_x[ERR_GYRO_BIAS_IDX])
 
         NEESes = np.array(

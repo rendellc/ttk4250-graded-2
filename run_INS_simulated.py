@@ -430,13 +430,13 @@ parameters = dict(
     cont_gyro_noise_std = 4.36e-5,  # (rad/s)/sqrt(Hz)
     cont_acc_noise_std = 1.167e-3,  # (m/s**2)/sqrt(Hz)
     # Discrete sample noise at simulation rate used
-    rate_std_factor = 0.3, 
-    acc_std_factor = 0.3,
+    rate_std_factor = 0.4, 
+    acc_std_factor = 1,
     # Bias values
     rate_bias_driving_noise_std = 5e-5,
     cont_rate_bias_factor = 1,
     acc_bias_driving_noise_std = 4e-3,
-    cont_acc_bias_factor = 6,
+    cont_acc_bias_factor = 1.3,
     p_acc = 1e-16,
     p_gyro = 1e-16,
     # Position and velocity measurement
@@ -451,7 +451,7 @@ parameters = dict(
     sigma_err_gyro_bias = 0.005,
     # Simulation parameters
     dt = dt,
-    N = 1000,
+    N = steps,
     doGNSS = True,
     debug = False,
     dosavefigures = True,
