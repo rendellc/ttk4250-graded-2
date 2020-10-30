@@ -144,7 +144,7 @@ def kinematicerrorplot(t, delta_x, eul_error, N, title):
             r"$\theta$",
             r"$\psi$",
         ],
-        loc='upper right'
+        loc='best'
     )
 
     fig.tight_layout()
@@ -202,39 +202,39 @@ def stateerrorplot(t, delta_x, eul_error, N, title):
     figab, axab = plt.subplots(1, 1, clear=True)
     figgb, axgb = plt.subplots(1, 1, clear=True)
 
-    delta_x_RMSE = np.round(np.sqrt(np.mean(delta_x[:N] ** 2, axis=0)),3)
+    delta_x_RMSE = np.sqrt(np.mean(delta_x[:N] ** 2, axis=0))
     _multiplot([axs[0],axpos], t, delta_x[:N, POS_IDX], r"Pos $[m]$", [
-                    f"N ({delta_x_RMSE[POS_IDX[0]]})",
-                    f"E ({delta_x_RMSE[POS_IDX[1]]})",
-                    f"D ({delta_x_RMSE[POS_IDX[2]]})",
-                ], 'upper right'
+            f"N ({delta_x_RMSE[POS_IDX[0]]:.3f})",
+            f"E ({delta_x_RMSE[POS_IDX[1]]:.3f})",
+            f"D ({delta_x_RMSE[POS_IDX[2]]:.3f})",
+        ], 'upper right'
     )
 
     _multiplot([axs[1],axvel], t, delta_x[:N, VEL_IDX], r"Vel $[m]$", [
-            f"N ({delta_x_RMSE[VEL_IDX[0]]})",
-            f"E ({delta_x_RMSE[VEL_IDX[1]]})",
-            f"D ({delta_x_RMSE[VEL_IDX[2]]})",
+            f"N ({delta_x_RMSE[VEL_IDX[0]]:.3f})",
+            f"E ({delta_x_RMSE[VEL_IDX[1]]:.3f})",
+            f"D ({delta_x_RMSE[VEL_IDX[2]]:.3f})",
         ], 'upper right'
     )
 
     _multiplot([axs[2],axang], t, eul_error, "Attitude [deg]", [
-            rf"$\phi$ ({np.sqrt(np.mean((eul_error[:N, 0])**2)):e})",
-            rf"$\theta$ ({np.sqrt(np.mean((eul_error[:N, 1])**2)):e})",
-            rf"$\psi$ ({np.sqrt(np.mean((eul_error[:N, 2])**2)):e})",
+            rf"$\phi$ ({np.sqrt(np.mean((eul_error[:N, 0])**2)):.3f})",
+            rf"$\theta$ ({np.sqrt(np.mean((eul_error[:N, 1])**2)):.3f})",
+            rf"$\psi$ ({np.sqrt(np.mean((eul_error[:N, 2])**2)):3f})",
         ], 'upper right'
     )
 
     _multiplot([axs[3],axab], t, delta_x[:N, ERR_ACC_BIAS_IDX], r"Acl bias $[m/s^2]$", [
-            f"$x$ ({delta_x_RMSE[ERR_ACC_BIAS_IDX[0]]})",
-            f"$y$ ({delta_x_RMSE[ERR_ACC_BIAS_IDX[1]]})",
-            f"$z$ ({delta_x_RMSE[ERR_ACC_BIAS_IDX[2]]})",
+            f"$x$ ({delta_x_RMSE[ERR_ACC_BIAS_IDX[0]]:.3f})",
+            f"$y$ ({delta_x_RMSE[ERR_ACC_BIAS_IDX[1]]:.3f})",
+            f"$z$ ({delta_x_RMSE[ERR_ACC_BIAS_IDX[2]]:.3f})",
         ], 'upper right'
     )
 
     _multiplot([axs[4],axgb], t, np.rad2deg(delta_x[:N, ERR_GYRO_BIAS_IDX]), "Gyro bias [deg/s]", [
-            f"$x$ ({np.rad2deg(delta_x_RMSE[ERR_GYRO_BIAS_IDX[0]]):e})",
-            f"$y$ ({np.rad2deg(delta_x_RMSE[ERR_GYRO_BIAS_IDX[1]]):e})",
-            f"$z$ ({np.rad2deg(delta_x_RMSE[ERR_GYRO_BIAS_IDX[2]]):e})",
+            f"$x$ ({np.rad2deg(delta_x_RMSE[ERR_GYRO_BIAS_IDX[0]]):.2e})",
+            f"$y$ ({np.rad2deg(delta_x_RMSE[ERR_GYRO_BIAS_IDX[1]]):.2e})",
+            f"$z$ ({np.rad2deg(delta_x_RMSE[ERR_GYRO_BIAS_IDX[2]]):.2e})",
         ], 'upper right'
     )
 
@@ -250,11 +250,24 @@ def stateerrorplot(t, delta_x, eul_error, N, title):
 def boxplot(ax, datas, ndim, labels):
     N = len(datas[0])
     gauss_compare = np.sum(np.random.randn(ndim, N)**2, axis=0)
-    ax.boxplot([*datas, gauss_compare], notch=True)
+    ax.boxplot([*datas, gauss_compare], notch=True, showfliers=False)
     ax.set_xticklabels([*labels, 'gauss'], rotation=90)
     ax.set_yticks([])
     ax.tick_params(axis="x", which="minor", length=0)
 
+def pretty_NEESNIS(ax, t, neesnis, label, CI, fillCI, upperY, drawLineCI=False):
+    ax.plot(t, neesnis.T, label=label)
+
+    if fillCI:
+        lowerline = np.ones_like(t)*CI[0]
+        upperline = np.ones_like(t)*upperY
+        ax.fill_between(t, 0, lowerline, facecolor="tab:gray", alpha=0.5) 
+        ax.fill_between(t, CI[1], upperline, facecolor="tab:gray", alpha=0.5)
+    elif drawLineCI:
+        ax.plot([t[0], t[~0]], (CI @ np.ones((1, 2))).T)
+
+    ax.set_xlim([t[0], t[~0]])
+    ax.set_ylim([0, upperY])
 
 def plot_NEES(ax, delta_x, P, t, state_indices):
     NEES = [eskf._NEES(P[k][state_indices**2], delta_x[k][state_indices]) for k in range(len(t))]
@@ -268,8 +281,9 @@ def plot_NIS(NIS, CI, NIS_name, confprob, dt, N, GNSSk, ax=None):
     ax.plot(np.array([0, N - 1]) * dt, (CI @ np.ones((1, 2))).T)
     insideCI = np.mean((CI[0] <= NIS[:GNSSk]) * (NIS[:GNSSk] <= CI[1]))
     
-    upperY = CI[1]//1 * 2
+    upperY = min(np.max(NIS), CI[1]//1 * 4)
     ax.set_title(f"{NIS_name} ({100 *  insideCI:.1f} % inside {100 * confprob} CI)")
+    ax.set_xlim(0,(N-1)*dt)
     ax.set_ylim(0,upperY)
 
 

@@ -10,6 +10,8 @@ import numpy as np
 
 import plotutils as plot
 
+import latexutils
+
 try: # see if tqdm is available, otherwise define it as a dummy
     try: # Ipython seem to require different tqdm.. try..except seem to be the easiest way to check
         __IPYTHON__
@@ -254,7 +256,6 @@ def run_experiment(parameters):
     print(rf'{"ANEES_gyrobias:":<20} {ANEES_gyrobias:^25} {CI3N}')
     print(rf'{"ANIS:":<20} {ANIS:^25} {CI3N}')
 
-
     eul = np.apply_along_axis(quaternion_to_euler, 1, x_est[:N, ATT_IDX])
     eul_true = np.apply_along_axis(quaternion_to_euler, 1, x_true[:N, ATT_IDX])
     wrap_to_pi = lambda rads: (rads + np.pi) % (2 * np.pi) - np.pi
@@ -317,40 +318,52 @@ def run_experiment(parameters):
         axs4[1].legend(loc='upper right')
         fig4.tight_layout()
 
+        latexutils.save_value("Estimation error", f"{est_error:.3f}", "csvs/sim_est_error_pos.csv")
+        latexutils.save_value("GNSS error", f"{meas_error:.3f}", "csvs/sim_meas_error_pos.csv")
+
         #fig4.tight_layout()
         if dosavefigures:
             fig4.savefig(figdir+"estimate_vs_measurement_error.pdf")
 
 
         fig5, axs5 = plt.subplots(4, 1, num=5, clear=True, sharex=True)
-        fig5.subplots_adjust(hspace=0.3) # so ytick dont overlap
+        fig5.subplots_adjust(hspace=0.4) # so ytick dont overlap
+        fig5.set_size_inches((3.5, 5))
 
         insideCItot = np.mean((CI15[0] <= NEES_all[:N]) * (NEES_all[:N] <= CI15[1]))
-        axs5[0].plot(t, (NEES_all[:N]).T, label="total")
-        axs5[0].plot(np.array([0, N - 1]) * dt, (CI15 @ np.ones((1, 2))).T)
-        axs5[0].set_ylim([0, 50])
-        axs5[0].legend(loc="upper right")
+        plot.pretty_NEESNIS(axs5[0], t, NEES_all[:N], "total", CI15, fillCI=True, upperY=50)
+        axs5[0].legend(loc="upper right",ncol=1)
 
-        axs5[1].plot([t[0], t[~0]], (CI3 @ np.ones((1, 2))).T)
-        axs5[1].plot(t, (NEES_pos[0:N]).T, label="pos")
-        axs5[1].plot(t, (NEES_vel[0:N]).T, label="vel")
-        axs5[1].plot(t, (NEES_att[0:N]).T, label="att")
-        axs5[1].set_ylim([0, 20])
-        axs5[1].legend(loc="upper right")
 
-        axs5[2].plot([t[0], t[~0]], (CI3 @ np.ones((1, 2))).T)
-        axs5[2].plot(t, (NEES_accbias[0:N]).T,  label="accel bias")
-        axs5[2].plot(t, (NEES_gyrobias[0:N]).T, label="gyro bias")
-        axs5[2].set_ylim([0, 20])
-        axs5[2].legend(loc="upper right")
+        plot.pretty_NEESNIS(axs5[1], t, NEES_pos[:N], "pos", CI3, fillCI=True, upperY=20)
+        plot.pretty_NEESNIS(axs5[1], t, NEES_vel[:N], "vel", CI3, fillCI=False, upperY=20)
+        plot.pretty_NEESNIS(axs5[1], t, NEES_att[:N], "att", CI3, fillCI=False, upperY=20)
+        #axs5[1].plot([t[0], t[~0]], (CI3 @ np.ones((1, 2))).T)
+        # axs5[1].plot(t, (NEES_pos[0:N]).T, label="pos")
+        # axs5[1].plot(t, (NEES_vel[0:N]).T, label="vel")
+        # axs5[1].plot(t, (NEES_att[0:N]).T, label="att")
+        # axs5[1].set_ylim([0, 20])
+        axs5[1].legend(loc="best",ncol=3)
 
-        axs5[3].plot([t[0], t[~0]], (CI3 @ np.ones((1, 2))).T)
-        axs5[3].plot(NIS[:GNSSk], label="NIS")
-        axs5[3].set_ylim([0, 20])
+        #axs5[2].plot([t[0], t[~0]], (CI3 @ np.ones((1, 2))).T)
+        plot.pretty_NEESNIS(axs5[2], t, NEES_accbias[:N], "accel bias", CI3, fillCI=True, upperY=20)
+        plot.pretty_NEESNIS(axs5[2], t, NEES_gyrobias[:N], "gyro bias", CI3, fillCI=False, upperY=20)
+        # axs5[2].plot(t, (NEES_accbias[0:N]).T,  label="accel bias")
+        # axs5[2].plot(t, (NEES_gyrobias[0:N]).T, label="gyro bias")
+        # axs5[2].set_ylim([0, 20])
+        axs5[2].legend(loc="best",ncol=2)
+        
+        t_gnssk = np.linspace(t[0], t[~0], GNSSk)
+        plot.pretty_NEESNIS(axs5[3], t_gnssk, NIS[:GNSSk], "NIS", CI3, fillCI=True, upperY=20)
+        # axs5[3].plot([t[0], t[~0]], (CI3 @ np.ones((1, 2))).T)
+        # axs5[3].plot(NIS[:GNSSk], label="NIS")
+        # axs5[3].set_ylim([0, 20])
         axs5[3].legend(loc="upper right")
 
         for ax in axs5:
             ax.set_xlim([t[0], t[~0]])
+
+        #fig5.tight_layout()
 
         insideCIpos = np.mean((CI3[0] <= NEES_pos[:N]) * (NEES_pos[:N] <= CI3[1]))
         insideCIvel = np.mean((CI3[0] <= NEES_vel[:N]) * (NEES_vel[:N] <= CI3[1]))
@@ -394,6 +407,20 @@ def run_experiment(parameters):
         plot.plot_NIS(NIS_z, CI1, "NIS_z", confprob, dt, N, GNSSk)
         plot.plot_NIS(NIS_xy, CI2, "NIS_xy", confprob, dt, N, GNSSk)
 
+        consistencydatas = [
+                dict(avg=ANEES,inside=insideCItot, text="NEES",CI=CI15N),
+                dict(avg=ANEES_pos,inside=insideCIpos, text="NEES pos",CI=CI3N),
+                dict(avg=ANEES_vel,inside=insideCIvel, text="NEES vel",CI=CI3N),
+                dict(avg=ANEES_att,inside=insideCIatt, text="NEES att",CI=CI3N),
+                dict(avg=ANEES_accbias,inside=insideCIgb, text="NEES gyro bias",CI=CI3N),
+                dict(avg=ANEES_gyrobias,inside=insideCIab, text="NEES acc bias",CI=CI3N),
+                dict(avg=ANIS,inside=insideCInis, text="NIS",CI=CI3N),
+        ]
+
+        latexutils.save_consistency_results(consistencydatas, "csvs/sim_consistency.csv")
+
+
+
     if doshowplot:
         plt.show()
 
@@ -424,7 +451,7 @@ parameters = dict(
     doGNSS = True,
     debug = False,
     dosavefigures = True,
-    doshowplot = True,
+    doshowplot = False,
     figdir="figs/simulated_all/",
     dopickle = False,
 )
@@ -432,9 +459,8 @@ parameters = dict(
 if __name__ == "__main__":
     run_experiment(parameters)
 
-    import latexutils
-    parameter_texvalues = latexutils.parameter_to_texvalues(sim_parameters)
-    latexutils.save_params_to_csv(parameter_texvalues, "csvs/simulated_params_test.csv")
+    parameter_texvalues = latexutils.parameter_to_texvalues(parameters)
+    latexutils.save_params_to_csv(parameter_texvalues, "csvs/simulated_params.csv")
 
 
 

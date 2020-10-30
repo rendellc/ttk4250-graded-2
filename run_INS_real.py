@@ -98,7 +98,7 @@ except Exception as e:
 filename_to_load = "task_real.mat"
 loaded_data = scipy.io.loadmat(filename_to_load)
 
-do_corrections = False
+do_corrections = True
 if do_corrections:
     S_a = loaded_data['S_a']
     S_g = loaded_data['S_g']
@@ -254,19 +254,27 @@ fig2all.savefig(figdir+"state_estimates.pdf")
 # %% Consistency
 confprob = 0.95
 CI1 = np.array(scipy.stats.chi2.interval(confprob, 1)).reshape((2, 1))
+CI1N = np.array(scipy.stats.chi2.interval(confprob, 1 * N)) / N
 CI2 = np.array(scipy.stats.chi2.interval(confprob, 2)).reshape((2, 1))
-CI3N = np.array(scipy.stats.chi2.interval(confprob, 3 * N)) / N
+CI2N = np.array(scipy.stats.chi2.interval(confprob, 2 * N)) / N
 CI3 = np.array(scipy.stats.chi2.interval(confprob, 3)).reshape((2, 1))
+CI3N = np.array(scipy.stats.chi2.interval(confprob, 3 * N)) / N
 insideCI = np.mean((CI3[0] <= NIS[:GNSSk]) * (NIS[:GNSSk] <= CI3[1]))
 
 fig3, ax3 = plt.subplots(1,1)
 plot.plot_NIS(NIS, CI3, "NIS", confprob, dt, N, GNSSk, ax=ax3)
+fig3p, ax3p = plt.subplots(1,1)
+
+t_gnssk = np.linspace(t[0], t[~0], GNSSk)
+plot.pretty_NEESNIS(ax3p, t_gnssk, NIS[:GNSSk], "NIS", CI3, fillCI=True, upperY=30)
+#ax3p.legend(loc="best",ncol=1)
 #plt.plot(NIS[:GNSSk])
 #plt.plot(np.array([0, N-1]) * dt, (CI3@np.ones((1, 2))).T)
 #plt.title(f'NIS ({100 *  insideCI:.1f} inside {100 * confprob} confidence interval)')
 #plt.grid()
 
-fig3.savefig(figdir+"nis.pdf")
+fig3.savefig(figdir+"nis_old.pdf")
+fig3p.savefig(figdir+"nis.pdf")
 
 # %% box plots
 fig4, ax4 = plt.subplots(1,1)
@@ -280,6 +288,17 @@ plot.plot_NIS(NIS_x, CI1, "NIS x", confprob, dt, N, GNSSk)
 plot.plot_NIS(NIS_y, CI1, "NIS y", confprob, dt, N, GNSSk)
 plot.plot_NIS(NIS_z, CI1, "NIS z", confprob, dt, N, GNSSk)
 plot.plot_NIS(NIS_xy, CI2, "NIS xy", confprob, dt, N, GNSSk)
+
+fig5p, ax5p = plt.subplots(2,1, sharex=True)
+plot.pretty_NEESNIS(ax5p[0], t_gnssk, NIS_x[:GNSSk], "NIS x", CI1, fillCI=True, upperY=20)
+plot.pretty_NEESNIS(ax5p[0], t_gnssk, NIS_y[:GNSSk], "NIS y", CI1, fillCI=False, upperY=20)
+plot.pretty_NEESNIS(ax5p[0], t_gnssk, NIS_z[:GNSSk], "NIS z", CI1, fillCI=False, upperY=20)
+ax5p[0].legend(loc="best",ncol=3)
+plot.pretty_NEESNIS(ax5p[1], t_gnssk, NIS_xy[:GNSSk], "NIS xy", CI2, fillCI=True, upperY=20)
+#ax5p[1].legend(loc="best",ncol=1)
+
+
+fig5p.savefig(figdir + "nises.pdf")
 
 ANIS = NIS[:GNSSk].mean()
 
@@ -310,6 +329,32 @@ for k in remove_keys:
     del parameter_texvalues[k]
 
 latexutils.save_params_to_csv(parameter_texvalues, "csvs/real_params.csv")
+
+consistencydatas = [
+        dict(avg=ANIS,inside=insideCI, text="NIS",CI=CI3N),
+]
+
+latexutils.save_consistency_results(consistencydatas, "csvs/real_consistency.csv")
+
+ANIS_x = NIS_x[:GNSSk].mean()
+ANIS_y = NIS_y[:GNSSk].mean()
+ANIS_z = NIS_z[:GNSSk].mean()
+ANIS_xy = NIS_xy[:GNSSk].mean()
+
+insideCIx = np.mean((CI1[0] <= NIS_x[:GNSSk]) * (NIS_x[:GNSSk] <= CI1[1]))
+insideCIy = np.mean((CI1[0] <= NIS_y[:GNSSk]) * (NIS_y[:GNSSk] <= CI1[1]))
+insideCIz = np.mean((CI1[0] <= NIS_z[:GNSSk]) * (NIS_z[:GNSSk] <= CI1[1]))
+insideCIxy = np.mean((CI2[0] <= NIS_xy[:GNSSk]) * (NIS_xy[:GNSSk] <= CI2[1]))
+
+consistencydatas = [
+        dict(avg=ANIS,inside=insideCI, text="NIS",CI=CI3N),
+        dict(avg=ANIS_x,inside=insideCIx, text="NIS x",CI=CI1N),
+        dict(avg=ANIS_y,inside=insideCIy, text="NIS y",CI=CI1N),
+        dict(avg=ANIS_z,inside=insideCIz, text="NIS z",CI=CI1N),
+        dict(avg=ANIS_xy,inside=insideCIxy, text="NIS xy",CI=CI2N),
+]
+
+latexutils.save_consistency_results(consistencydatas, "csvs/real_consistency_all.csv")
 
 # pickle figures so we can review them later
 # savedir = "results/real_pickle/"

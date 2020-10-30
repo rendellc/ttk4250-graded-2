@@ -74,3 +74,38 @@ def save_params_to_csv(params, filename, headers=[]):
         for k,v in params.items():
             writer.writerow(["", k, v])
 
+
+def save_consistency_results(consdatas, filename):
+    # consdatas : [{avg, inside, text, CI}]
+
+    round_str = lambda num: round(num,3)
+    percent_str = lambda num: rf"{(100*num):.1f}\%"
+
+    with open(filename, 'w', newline='') as csvfile:
+        print("Writing consistency results to", csvfile.name)
+        writer = csv.writer(csvfile, delimiter=';',quoting=csv.QUOTE_MINIMAL)
+
+        # write so that latex will interpret it correctly
+        # cant start a line with backslash so first column is empty
+
+        #writer.writerow(["", "", "Inside", "Averaged", "CI"])
+        for consdata in consdatas:
+            avg = round_str(consdata["avg"])
+            inside = percent_str(consdata["inside"])
+            text = consdata["text"]
+
+            CI = consdata.get("CI", [])
+            if len(CI) > 0:
+                CItext = f"({round_str(CI[0])},{round_str(CI[1])})"
+            else:
+                CItext = "-"
+
+            writer.writerow(["", text, inside, avg, CItext])
+
+def save_value(name, value, filename):
+    with open(filename, 'w', newline='') as csvfile:
+        print(f"Saving {name} to", csvfile.name)
+        writer = csv.writer(csvfile, delimiter=';',quoting=csv.QUOTE_MINIMAL)
+        writer.writerow([name, value])
+
+
